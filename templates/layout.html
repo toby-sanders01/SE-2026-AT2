@@ -25,8 +25,24 @@
     <div class="wrapper px-6 md:px-16 lg:px-24 xl:px-32 py-8">
         {% block body %}{% endblock %}
     </div>
-
-
-
 </body>
+
+{% if show_footer %}
+<footer class="w-full bg-white text-gray-700 shadow-[0px_-10px_25px_0px_#0000000D]"> 
+    <div class="px-6 md:px-16 lg:px-24 xl:px-32 py-8 flex flex-col items-center">
+        
+        <img src="/static/big-logo.png" width="150">
+        
+        <p class="mt-4 text-center text-sm">
+            Copyright © 2026 
+            <a href="{{ url_for('index') }}" class="hover:underline">
+                inventryx
+            </a>. All rights reserved.
+        </p>
+    
+    </div>
+</footer>
+{% endif %}
+
+
 </html>

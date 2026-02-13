@@ -1,6 +1,22 @@
 {% extends "layout.html" %}
 
 {% block body %}
-<h1> index.html </h1>
+<section class="flex flex-col items-center">
+    
+  <h1 class="text-center text-slate-800 text-4xl md:text-5xl/16 font-semibold max-w-3xl leading-tight bg-clip-text my-2.5 px-4">
+    Reliable <span class="bg-gradient-to-r from-indigo-600 to-pink-400 bg-clip-text text-transparent"> inventory management </span> to boost your productivity.
+  </h1>
+  <p class="text-center text-base text-gray-600 max-w-md px-6">
+    Know what you have. When you need it.
+  </p>
+  
+  <!-- <div class="flex items-center gap-4 mt-5 justify-center z-1">
+    <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md cursor-pointer">Get Started</button>
+  </div> -->
+
+  <div class="relative mt-12 w-full max-w-4xl px-4">
+    <div class="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-full h-full bg-[#4e59a3] blur-[75px] opacity-45 z-0"></div>
+    <img class="relative z-1 w-full object-cover object-top" src="https://assets.prebuiltui.com/images/components/hero-section/hero-dashImage2.png" alt="dashboard" />
+  </div>
 {% endblock %}
 
