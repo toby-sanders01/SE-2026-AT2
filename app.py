@@ -39,7 +39,7 @@ init_db()
 
 @app.context_processor
 def inject_auth_state():
-    user_name = (session.get('user_name') or '').strip()
+    user_name = (session.get('user_name') or '').strip().capitalize()
     if not user_name and session.get('user_email'):
         user_name = session['user_email'].split('@', 1)[0]
     if not user_name:
@@ -53,7 +53,7 @@ def inject_auth_state():
 
 @app.route('/')
 def index():
-    return render_template("index.html", show_footer=False)
+    return render_template("index.html", show_footer=False, show_login=True)
 
 
 @app.route('/user')
@@ -69,7 +69,7 @@ def user():
         "user.html",
         show_footer=True,
         user_email=session.get('user_email'),
-        user_name=user_name
+        user_name=user_name.capitalize()
     )
 
 
