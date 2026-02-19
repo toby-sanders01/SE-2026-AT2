@@ -2,37 +2,43 @@
 
 {% block body %}
 <div class="-mx-6 md:-mx-16 lg:-mx-24 xl:-mx-32 -my-8 h-[calc(100vh-70px)] overflow-hidden flex items-center justify-center px-4">
-    <form class="bg-white text-gray-500 w-full max-w-sm p-5 sm:p-6 text-left text-sm rounded-xl shadow-[0px_0px_10px_0px] shadow-black/10">
+    <form method="post" action="{{ url_for('signup') }}" class="bg-white text-gray-500 w-full max-w-sm p-5 sm:p-6 text-left text-sm rounded-xl shadow-[0px_0px_10px_0px] shadow-black/10">
         <h2 class="text-2xl font-semibold my-4 text-center text-gray-800">Signup</h2>
 
-        <input id="email" 
-            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4" 
+        {% if error %}
+        <p class="text-red-600 text-center mb-2">{{ error }}</p>
+        {% endif %}
+
+        <input id="name" name="name"
+            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4"
+            type="text" placeholder="Enter your name" required>
+
+        <input id="email" name="email"
+            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4"
             type="email" placeholder="Enter your email" required>
 
-        <input id="password" 
-            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4" 
+        <input id="password" name="password"
+            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4"
             type="password" placeholder="Enter a password (8+ characters required)" required>
 
-            <input id="confirm_password" 
-            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4" 
+        <input id="confirm_password" name="confirm_password"
+            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4"
             type="password" placeholder="Confirm your password" required>
 
-            <input id="workplace_id" 
-            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4" 
-            type="password" placeholder="Workplace ID" required>
+        <input id="workplace_id" name="workplace_id"
+            class="w-full border my-3 border-gray-500/30 outline-none rounded-full py-2.5 px-4"
+            type="text" placeholder="Workplace ID" required>
 
-        <button type="submit" 
+        <button type="submit"
             class="w-full my-3 bg-indigo-500 hover:bg-indigo-600/90 active:scale-95 transition py-2.5 rounded-full text-white">
             Sign up
         </button>
 
         <p class="text-center my-4">
-            Already have an account? 
+            Already have an account?
             <a href="{{ url_for('login') }}" class="text-blue-500 underline">Login</a>
         </p>
     </form>
 </div>
-</div>
 
 {% endblock %}
-
