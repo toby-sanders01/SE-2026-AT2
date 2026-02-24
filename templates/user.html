@@ -47,7 +47,7 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="item-modal-title"
-        class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
     >
         <div class="flex items-start justify-between gap-4">
             <h2 id="item-modal-title" class="text-xl font-semibold text-gray-900">Item Details</h2>
@@ -69,14 +69,55 @@
     </div>
 </div>
 
-<script> // Codex
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const welcomeSection = document.getElementById("welcome-section");
+        const welcomeCard = document.getElementById("welcome-card");
+        const modalOverlay = document.getElementById("item-modal-overlay");
+        const modalOpenButtons = document.querySelectorAll("[data-modal-open]");
+        const modalCloseButtons = document.querySelectorAll("[data-modal-close]");
+
+        const openModal = () => {
+            if (!modalOverlay) return;
+            modalOverlay.classList.remove("hidden");
+            modalOverlay.classList.add("flex");
+            modalOverlay.setAttribute("aria-hidden", "false");
+        };
+
+        const closeModal = () => {
+            if (!modalOverlay) return;
+            modalOverlay.classList.add("hidden");
+            modalOverlay.classList.remove("flex");
+            modalOverlay.setAttribute("aria-hidden", "true");
+        };
+
+        modalOpenButtons.forEach((button) => {
+            button.addEventListener("click", openModal);
+        });
+
+        modalCloseButtons.forEach((button) => {
+            button.addEventListener("click", closeModal);
+        });
+
+        if (modalOverlay) {
+            modalOverlay.addEventListener("click", (event) => {
+                if (event.target === modalOverlay) closeModal();
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") closeModal();
+        });
+
         if (!welcomeSection || !welcomeCard) return;
+
         setTimeout(() => {
             welcomeCard.classList.add("opacity-0");
             setTimeout(() => {
                 welcomeSection.remove();
             }, 500);
         }, 3000);
+    });
 </script>
 
 {% endblock %}
