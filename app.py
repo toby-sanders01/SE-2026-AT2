@@ -53,7 +53,7 @@ def inject_auth_state():
 
 @app.route('/')
 def index():
-    return render_template("index.html", show_footer=False, show_login=True)
+    return render_template("index.html", show_footer=True, show_login=True)
 
 
 @app.route('/user')

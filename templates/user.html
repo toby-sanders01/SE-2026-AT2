@@ -60,11 +60,18 @@
             </button>
         </div>
 
-        <div class="mt-4 space-y-3 text-sm text-gray-700">
-            <p><span class="font-semibold text-gray-900">Tag:</span> SKU-001</p>
-            <p><span class="font-semibold text-gray-900">Status:</span> In Stock</p>
-            <p><span class="font-semibold text-gray-900">Items Remaining:</span> 42</p>
-            <p><span class="font-semibold text-gray-900">Description:</span> In-depth item details can be shown here from your database.</p>
+        <div class="mt-4 flex flex-col sm:flex-row items-start gap-6 text-sm text-gray-700">
+            <img
+                src="{{ url_for('static', filename='small-logo.png') }}"
+                alt="Item image"
+                class="h-40 w-40 rounded-xl object-cover bg-gray-100 p-2 shrink-0"
+            >
+            <div class="space-y-3">
+                <p><span class="font-semibold text-gray-900">Tag:</span> SKU-001</p>
+                <p><span class="font-semibold text-gray-900">Status:</span> In Stock</p>
+                <p><span class="font-semibold text-gray-900">Items Remaining:</span> 42</p>
+                <p><span class="font-semibold text-gray-900">Description:</span> In-depth item details can be shown here from your database.</p>
+            </div>
         </div>
     </div>
 </div>
