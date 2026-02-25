@@ -4,10 +4,12 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-change-me"
+USERS_DB_PATH = 'users.db'
+ITEMS_DB_PATH = 'items.db'
 
 
-def init_db():
-    conn = sqlite3.connect('users.db')
+def init_users_db():
+    conn = sqlite3.connect(USERS_DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -18,23 +20,44 @@ def init_db():
         )
     ''')
 
-    # Migrate older databases that were created before `name` existed.
-    columns = [column[1] for column in c.execute("PRAGMA table_info(users)").fetchall()]
-    if 'name' not in columns:
-        c.execute("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT ''")
-
     conn.commit()
     conn.close()
 
 
-def get_db_connection():
-    conn = sqlite3.connect('users.db')
+def init_items_db():
+    conn = sqlite3.connect(ITEMS_DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            image TEXT NOT NULL DEFAULT '',
+            stock_remaining INTEGER NOT NULL DEFAULT 0,
+            title TEXT NOT NULL DEFAULT '',
+            tag TEXT NOT NULL DEFAULT '',
+            description TEXT NOT NULL DEFAULT ''
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+
+def get_users_db_connection():
+    conn = sqlite3.connect(USERS_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-# Ensure the table exists on startup.
-init_db()
+def get_items_db_connection():
+    conn = sqlite3.connect(ITEMS_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# Ensure both tables exist on startup.
+init_users_db()
+init_items_db()
 
 
 @app.context_processor
@@ -60,16 +83,44 @@ def index():
 def user():
     if 'user_id' not in session:
         return redirect(url_for('login'))
-    user_name = (session.get('user_name') or '').strip()
-    if not user_name and session.get('user_email'):
-        user_name = session['user_email'].split('@', 1)[0]
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, name, email FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+
+    if not db_user:
+        users_conn.close()
+        session.clear()
+        return redirect(url_for('login'))
+
+    user_name = (db_user['name'] or '').strip()
     if not user_name:
-        user_name = "there"
+        user_name = db_user['email'].split('@', 1)[0]
+
+    items_conn = get_items_db_connection()
+    items = items_conn.execute(
+        '''
+        SELECT id, image, stock_remaining, title, tag, description
+        FROM items
+        WHERE user_id = ? OR user_id IS NULL
+        ORDER BY id
+        ''',
+        (db_user['id'],)
+    ).fetchall()
+
+    items_conn.close()
+    users_conn.close()
+
+    session['user_email'] = db_user['email']
+    session['user_name'] = user_name
     return render_template(
         "user.html",
         show_footer=True,
-        user_email=session.get('user_email'),
-        user_name=user_name.capitalize()
+        user_email=db_user['email'],
+        user_name=user_name.capitalize(),
+        items=items
     )
 
 
@@ -82,7 +133,7 @@ def login():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
 
-        conn = get_db_connection()
+        conn = get_users_db_connection()
         user = conn.execute('SELECT id, name, email, password FROM users WHERE email = ?', (email,)).fetchone()
         conn.close()
 
@@ -125,7 +176,7 @@ def signup():
         elif not email:
             error = 'Email is required.'
         else:
-            conn = get_db_connection()
+            conn = get_users_db_connection()
             try:
                 conn.execute(
                     'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',

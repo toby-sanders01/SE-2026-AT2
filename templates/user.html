@@ -9,24 +9,45 @@
     </section>
 
     <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {% for item in items %}
         <article class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <div class="flex items-start gap-4">
+                {% if item['image'] %}
+                    {% if item['image'].startswith('http://') or item['image'].startswith('https://') %}
+                        {% set image_src = item['image'] %}
+                    {% else %}
+                        {% set image_src = url_for('static', filename=item['image']) %}
+                    {% endif %}
+                {% else %}
+                    {% set image_src = url_for('static', filename='small-logo.png') %}
+                {% endif %}
                 <img
-                    src="{{ url_for('static', filename='small-logo.png') }}"
-                    alt="Item image"
+                    src="{{ image_src }}"
+                    alt="{{ item['title'] }} image"
                     class="h-20 w-20 rounded-xl object-cover bg-gray-100 p-2"
                 >
 
                 <div class="flex-1 space-y-2">
-                    <h3 class="text-lg font-semibold text-gray-900">Bearing</h3>
-                    <p class="text-sm font-medium text-gray-500">121212</p>
+                    <h3 class="text-lg font-semibold text-gray-900">{{ item['title'] }}</h3>
+                    <p class="text-sm font-medium text-gray-500">{{ item['tag'] }}</p>
+                    {% if item['stock_remaining'] > 0 %}
                     <div class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                         In Stock
                     </div>
-                    <p class="text-base font-semibold text-gray-900">Items Remaining: 67</p>
+                    {% else %}
+                    <div class="inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                        Out of Stock
+                    </div>
+                    {% endif %}
+                    <p class="text-base font-semibold text-gray-900">Items Remaining: {{ item['stock_remaining'] }}</p>
                     <button
                         type="button"
                         data-modal-open
+                        data-item-title="{{ item['title'] }}"
+                        data-item-tag="{{ item['tag'] }}"
+                        data-item-stock="{{ item['stock_remaining'] }}"
+                        data-item-description="{{ item['description'] }}"
+                        data-item-image="{{ image_src }}"
                         class="mt-2 inline-flex items-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                         More info
@@ -34,6 +55,11 @@
                 </div>
             </div>
         </article>
+        {% else %}
+        <article class="sm:col-span-2 xl:col-span-3 bg-white border border-dashed border-gray-300 rounded-2xl p-10 text-center text-gray-500">
+            No items yet. Add items to the database to populate this grid.
+        </article>
+        {% endfor %}
 
     </section>
 </div>
@@ -62,15 +88,16 @@
 
         <div class="mt-4 flex flex-col sm:flex-row items-start gap-6 text-sm text-gray-700">
             <img
+                id="item-modal-image"
                 src="{{ url_for('static', filename='small-logo.png') }}"
                 alt="Item image"
                 class="h-40 w-40 rounded-xl object-cover bg-gray-100 p-2 shrink-0"
             >
             <div class="space-y-3">
-                <p><span class="font-semibold text-gray-900">Tag:</span> SKU-001</p>
-                <p><span class="font-semibold text-gray-900">Status:</span> In Stock</p>
-                <p><span class="font-semibold text-gray-900">Items Remaining:</span> 42</p>
-                <p><span class="font-semibold text-gray-900">Description:</span> In-depth item details can be shown here from your database.</p>
+                <p><span class="font-semibold text-gray-900">Tag:</span> <span id="item-modal-tag">-</span></p>
+                <p><span class="font-semibold text-gray-900">Status:</span> <span id="item-modal-status">-</span></p>
+                <p><span class="font-semibold text-gray-900">Items Remaining:</span> <span id="item-modal-stock">-</span></p>
+                <p><span class="font-semibold text-gray-900">Description:</span> <span id="item-modal-description">-</span></p>
             </div>
         </div>
     </div>
@@ -84,8 +111,29 @@
         const modalOpenButtons = document.querySelectorAll("[data-modal-open]");
         const modalCloseButtons = document.querySelectorAll("[data-modal-close]");
 
-        const openModal = () => {
+        const modalTitle = document.getElementById("item-modal-title");
+        const modalImage = document.getElementById("item-modal-image");
+        const modalTag = document.getElementById("item-modal-tag");
+        const modalStatus = document.getElementById("item-modal-status");
+        const modalStock = document.getElementById("item-modal-stock");
+        const modalDescription = document.getElementById("item-modal-description");
+
+        const openModal = (button) => {
             if (!modalOverlay) return;
+
+            const stockCount = Number.parseInt(button.dataset.itemStock || "0", 10);
+            const inStock = Number.isFinite(stockCount) && stockCount > 0;
+
+            if (modalTitle) modalTitle.textContent = button.dataset.itemTitle || "Item Details";
+            if (modalImage) {
+                modalImage.src = button.dataset.itemImage || "{{ url_for('static', filename='small-logo.png') }}";
+                modalImage.alt = `${button.dataset.itemTitle || "Item"} image`;
+            }
+            if (modalTag) modalTag.textContent = button.dataset.itemTag || "-";
+            if (modalStatus) modalStatus.textContent = inStock ? "In Stock" : "Out of Stock";
+            if (modalStock) modalStock.textContent = Number.isFinite(stockCount) ? stockCount.toString() : "0";
+            if (modalDescription) modalDescription.textContent = button.dataset.itemDescription || "-";
+
             modalOverlay.classList.remove("hidden");
             modalOverlay.classList.add("flex");
             modalOverlay.setAttribute("aria-hidden", "false");
@@ -99,7 +147,7 @@
         };
 
         modalOpenButtons.forEach((button) => {
-            button.addEventListener("click", openModal);
+            button.addEventListener("click", () => openModal(button));
         });
 
         modalCloseButtons.forEach((button) => {
@@ -116,14 +164,14 @@
             if (event.key === "Escape") closeModal();
         });
 
-        if (!welcomeSection || !welcomeCard) return;
-
-        setTimeout(() => {
-            welcomeCard.classList.add("opacity-0");
+        if (welcomeSection && welcomeCard) {
             setTimeout(() => {
-                welcomeSection.remove();
-            }, 500);
-        }, 3000);
+                welcomeCard.classList.add("opacity-0");
+                setTimeout(() => {
+                    welcomeSection.remove();
+                }, 500);
+            }, 3000);
+        }
     });
 </script>
 
