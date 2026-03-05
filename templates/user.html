@@ -13,7 +13,9 @@
         <article class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <div class="flex items-start gap-4">
                 {% if item['image'] %}
-                    {% if item['image'].startswith('http://') or item['image'].startswith('https://') %}
+                    {% if item['image'].startswith('/') %}
+                        {% set image_src = item['image'] %}
+                    {% elif item['image'].startswith('http://') or item['image'].startswith('https://') %}
                         {% set image_src = item['image'] %}
                     {% else %}
                         {% set image_src = url_for('static', filename=item['image']) %}

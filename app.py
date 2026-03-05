@@ -1,11 +1,15 @@
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, session
+from pathlib import Path
+from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-change-me"
 USERS_DB_PATH = 'users.db'
 ITEMS_DB_PATH = 'items.db'
+ITEM_IMAGES_DIR = Path('item_images')
+ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
 
 
 def init_users_db():
@@ -16,9 +20,20 @@ def init_users_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL DEFAULT '',
             email TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0
         )
     ''')
+
+    user_columns = [column[1] for column in c.execute("PRAGMA table_info(users)").fetchall()]
+    if 'is_admin' not in user_columns:
+        c.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+
+    admin_count = c.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
+    if admin_count == 0:
+        first_user = c.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()
+        if first_user:
+            c.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user[0],))
 
     conn.commit()
     conn.close()
@@ -38,9 +53,19 @@ def init_items_db():
             description TEXT NOT NULL DEFAULT ''
         )
     ''')
-    
+
+    ITEM_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
     conn.commit()
     conn.close()
+
+
+def get_upload_extension(filename):
+    safe_name = secure_filename(filename or '')
+    extension = Path(safe_name).suffix.lower()
+    if extension in ALLOWED_IMAGE_EXTENSIONS:
+        return extension
+    return None
 
 
 def get_users_db_connection():
@@ -70,13 +95,19 @@ def inject_auth_state():
 
     return {
         "logged_in": 'user_id' in session,
-        "current_user_name": user_name
+        "current_user_name": user_name,
+        "current_user_is_admin": bool(session.get('is_admin'))
     }
 
 
 @app.route('/')
 def index():
     return render_template("index.html", show_footer=True, show_login=True)
+
+
+@app.route('/item_images/<path:filename>')
+def item_image(filename):
+    return send_from_directory(ITEM_IMAGES_DIR, filename)
 
 
 @app.route('/user')
@@ -86,7 +117,7 @@ def user():
 
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
-        'SELECT id, name, email FROM users WHERE id = ?',
+        'SELECT id, name, email, is_admin FROM users WHERE id = ?',
         (session.get('user_id'),)
     ).fetchone()
 
@@ -115,6 +146,7 @@ def user():
 
     session['user_email'] = db_user['email']
     session['user_name'] = user_name
+    session['is_admin'] = bool(db_user['is_admin'])
     return render_template(
         "user.html",
         show_footer=True,
@@ -122,6 +154,99 @@ def user():
         user_name=user_name.capitalize(),
         items=items
     )
+
+
+@app.route('/admin', methods=['GET', 'POST'])
+def admin():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, name, email, is_admin FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+
+    if not db_user:
+        users_conn.close()
+        session.clear()
+        return redirect(url_for('login'))
+
+    if not db_user['is_admin']:
+        users_conn.close()
+        return redirect(url_for('user'))
+
+    user_name = (db_user['name'] or '').strip()
+    if not user_name:
+        user_name = db_user['email'].split('@', 1)[0]
+
+    error = None
+    success = None
+
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        tag = request.form.get('tag', '').strip()
+        image = request.form.get('image', '').strip()
+        description = request.form.get('description', '').strip()
+        stock_remaining_raw = request.form.get('stock_remaining', '').strip()
+        image_file = request.files.get('image_file')
+        upload_extension = None
+        uploaded_filename = ''
+
+        if image_file and image_file.filename:
+            uploaded_filename = image_file.filename.strip()
+
+        if not title:
+            error = 'Item title is required.'
+        elif not tag:
+            error = 'Item tag is required.'
+        elif uploaded_filename:
+            upload_extension = get_upload_extension(uploaded_filename)
+            if not upload_extension:
+                error = 'Upload a valid image file: png, jpg, jpeg, gif, webp, or svg.'
+
+        if error is None:
+            try:
+                stock_remaining = int(stock_remaining_raw)
+                if stock_remaining < 0:
+                    raise ValueError
+            except ValueError:
+                error = 'Stock remaining must be a non-negative whole number.'
+
+        if error is None:
+            image_value = image or 'small-logo.png'
+            items_conn = get_items_db_connection()
+            try:
+                insert_cursor = items_conn.execute(
+                    '''
+                    INSERT INTO items (user_id, image, stock_remaining, title, tag, description)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ''',
+                    (None, image_value, stock_remaining, title, tag, description)
+                )
+
+                if uploaded_filename and image_file and upload_extension:
+                    unique_filename = f"{insert_cursor.lastrowid}{upload_extension}"
+                    save_path = ITEM_IMAGES_DIR / unique_filename
+                    image_file.save(save_path)
+                    image_value = f"/item_images/{unique_filename}"
+                    items_conn.execute(
+                        "UPDATE items SET image = ? WHERE id = ?",
+                        (image_value, insert_cursor.lastrowid)
+                    )
+
+                items_conn.commit()
+                success = 'Item created successfully.'
+            except OSError:
+                items_conn.rollback()
+                error = 'Could not save uploaded image file.'
+            items_conn.close()
+
+    users_conn.close()
+    session['user_email'] = db_user['email']
+    session['user_name'] = user_name
+    session['is_admin'] = bool(db_user['is_admin'])
+    return render_template("admin.html", show_footer=True, error=error, success=success)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -134,7 +259,10 @@ def login():
         password = request.form.get('password', '')
 
         conn = get_users_db_connection()
-        user = conn.execute('SELECT id, name, email, password FROM users WHERE email = ?', (email,)).fetchone()
+        user = conn.execute(
+            'SELECT id, name, email, password, is_admin FROM users WHERE email = ?',
+            (email,)
+        ).fetchone()
         conn.close()
 
         if not user:
@@ -150,6 +278,7 @@ def login():
                 session['user_id'] = user['id']
                 session['user_email'] = user['email']
                 session['user_name'] = display_name
+                session['is_admin'] = bool(user['is_admin'])
                 return redirect(url_for('user'))
 
             error = 'Incorrect password.'
@@ -178,10 +307,17 @@ def signup():
         else:
             conn = get_users_db_connection()
             try:
-                conn.execute(
-                    'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-                    (name, email, generate_password_hash(password))
-                )
+                first_account = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+                if first_account:
+                    conn.execute(
+                        'INSERT INTO users (name, email, password, is_admin) VALUES (?, ?, ?, 1)',
+                        (name, email, generate_password_hash(password))
+                    )
+                else:
+                    conn.execute(
+                        'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+                        (name, email, generate_password_hash(password))
+                    )
                 conn.commit()
                 conn.close()
                 return redirect(url_for('login', created='1'))
