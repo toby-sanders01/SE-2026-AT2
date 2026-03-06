@@ -18,14 +18,15 @@
 
         {% if logged_in %}
         <div class="flex items-center gap-3 text-sm">
-            <a href="{{ url_for('user') }}"
-               class="px-3 py-1.5 rounded-full border border-gray-300 hover:bg-gray-50 transition-all">
-                User
-            </a>
             {% if current_user_is_admin %}
+             <a>
+                        <a href="{{ url_for('user') }}"
+               class="px-3 py-1.5 rounded-full border border-gray-300 hover:bg-gray-50 transition-all">
+                Item View
+            </a>
             <a href="{{ url_for('admin') }}"
                class="px-3 py-1.5 rounded-full border border-gray-300 hover:bg-gray-50 transition-all">
-                Admin
+                Admin View
             </a>
             {% endif %}
             <span>Hello, {{ current_user_name }}</span>

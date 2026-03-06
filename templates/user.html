@@ -2,11 +2,6 @@
 
 {% block body %}
 <div class="space-y-6">
-    <section id="welcome-section" class="max-w-3xl mx-auto">
-        <div id="welcome-card" class="bg-white rounded-2xl p-8 shadow-[0px_0px_12px_0px] shadow-black/10 transition-opacity duration-500">
-            <h1 class="text-xl font-semibold text-gray-800 text-center">Welcome, {{ user_name }}.</h1>
-        </div>
-    </section>
 
     <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {% for item in items %}
@@ -62,7 +57,6 @@
             No items yet. Add items to the database to populate this grid.
         </article>
         {% endfor %}
-
     </section>
 </div>
 
@@ -165,15 +159,6 @@
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") closeModal();
         });
-
-        if (welcomeSection && welcomeCard) {
-            setTimeout(() => {
-                welcomeCard.classList.add("opacity-0");
-                setTimeout(() => {
-                    welcomeSection.remove();
-                }, 500);
-            }, 3000);
-        }
     });
 </script>
 
