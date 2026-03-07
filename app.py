@@ -141,6 +141,35 @@ def user():
         (db_user['id'],)
     ).fetchall()
 
+    search_query = request.args.get('q', '').strip()
+    stock_filter = request.args.get('stock', 'all').strip().lower()
+    allowed_stock_filters = {'all', 'in-stock', 'low-stock', 'out-of-stock'}
+    if stock_filter not in allowed_stock_filters:
+        stock_filter = 'all'
+
+    if search_query:
+        search_lower = search_query.lower()
+        items = [
+            item for item in items
+            if search_lower in (item['title'] or '').lower()
+            or search_lower in (item['tag'] or '').lower()
+            or search_lower in (item['description'] or '').lower()
+        ]
+
+    if stock_filter != 'all':
+        filtered_items = []
+        for item in items:
+            stock_remaining = item['stock_remaining']
+            status = 'out-of-stock'
+            if stock_remaining > 10:
+                status = 'in-stock'
+            elif stock_remaining > 0:
+                status = 'low-stock'
+
+            if status == stock_filter:
+                filtered_items.append(item)
+        items = filtered_items
+
     items_conn.close()
     stock_feedback = None
     modal_item = None
@@ -235,6 +264,8 @@ def user():
         user_email=db_user['email'],
         user_name=user_name.capitalize(),
         items=items,
+        search_query=search_query,
+        selected_stock_filter=stock_filter,
         stock_feedback=stock_feedback,
         stock_confirmation=stock_confirmation,
         modal_item=modal_item,

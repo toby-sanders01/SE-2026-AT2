@@ -1,8 +1,8 @@
 {% extends "layout.html" %}
 
 {% block body %}
-
 <div class="max-w-3xl mx-auto">
+    
     <section class="bg-white rounded-2xl p-6 shadow-[0px_0px_12px_0px] shadow-black/10">
         <h1 class="text-2xl font-semibold text-gray-900">Create Item</h1>
         <p class="mt-2 text-sm text-gray-600">Create a new inventory item visible in the user view.</p>
@@ -23,7 +23,7 @@
                     name="title"
                     type="text"
                     required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
                     placeholder="Shoulder Bolt"
                 >
             </div>
@@ -35,7 +35,7 @@
                     name="tag"
                     type="text"
                     required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
                     placeholder="Bolts"
                 >
             </div>
@@ -50,7 +50,7 @@
                     step="1"
                     value="0"
                     required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
                 >
             </div>
 
@@ -61,7 +61,7 @@
                     name="image_file"
                     type="file"
                     accept=".png,.jpg,.jpeg,.gif,.webp,.svg"
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500 bg-white"
                 >
             </div>
 
@@ -71,7 +71,7 @@
                     id="description"
                     name="description"
                     rows="4"
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
                     placeholder="Short description..."
                 ></textarea>
             </div>
@@ -79,7 +79,7 @@
             <div class="sm:col-span-2 flex justify-end">
                 <button
                     type="submit"
-                    class="bg-indigo-500 hover:bg-indigo-600/90 text-white px-5 py-2.5 rounded-full transition"
+                    class="bg-slate-500 hover:bg-slate-600/90 text-white px-5 py-2.5 rounded-full transition"
                 >
                     Create Item
                 </button>
