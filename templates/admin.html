@@ -1,90 +1,150 @@
 {% extends "layout.html" %}
 
 {% block body %}
-<div class="max-w-3xl mx-auto">
-    
-    <section class="bg-white rounded-2xl p-6 shadow-[0px_0px_12px_0px] shadow-black/10">
-        <h1 class="text-2xl font-semibold text-gray-900">Create Item</h1>
-        <p class="mt-2 text-sm text-gray-600">Create a new inventory item visible in the user view.</p>
+<div class="space-y-8">
+    <section class="space-y-4">
+        <!-- Slide button to hide -->
+        <div class="flex items-center justify-between gap-4"> 
+            <h2 class="text-xl font-semibold text-gray-900">Inventory View</h2>
+            <label for="inventory-view-toggle" class="inline-flex items-center gap-3 cursor-pointer">
+                <span class="text-sm font-medium text-gray-700">Show</span>
+                <span class="relative inline-flex h-6 w-11 items-center">
+                    <input id="inventory-view-toggle" type="checkbox" class="peer sr-only" checked>
+                    <span class="absolute inset-0 rounded-full bg-gray-300 transition peer-checked:bg-slate-500"></span>
+                    <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition peer-checked:translate-x-5"></span>
+                </span>
+            </label>
+        </div>
 
-        {% if error %}
-        <p class="mt-4 text-red-600 text-sm">{{ error }}</p>
-        {% endif %}
+        <div id="inventory-view-content" class="space-y-4">
+            {% include "partials/item_filters.html" %}
+            {% include "partials/item_cards_modal.html" %}
+        </div>
+    </section>
 
-        {% if success %}
-        <p class="mt-4 text-green-600 text-sm">{{ success }}</p>
-        {% endif %}
+    <section class="space-y-4">
+        <!-- Slide button to hide -->
+        <div class="flex items-center justify-between gap-4">
+            <h2 class="text-xl font-semibold text-gray-900">Workspace Admin Controls</h2>
+            <label for="admin-controls-toggle" class="inline-flex items-center gap-3 cursor-pointer">
+                <span class="text-sm font-medium text-gray-700">Show</span>
+                <span class="relative inline-flex h-6 w-11 items-center">
+                    <input id="admin-controls-toggle" type="checkbox" class="peer sr-only" checked>
+                    <span class="absolute inset-0 rounded-full bg-gray-300 transition peer-checked:bg-slate-500"></span>
+                    <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition peer-checked:translate-x-5"></span>
+                </span>
+            </label>
+        </div>
 
-        <form method="post" action="{{ url_for('admin') }}" enctype="multipart/form-data" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div class="sm:col-span-2">
-                <label for="title" class="block font-medium text-gray-700 mb-1">Title</label>
-                <input
-                    id="title"
-                    name="title"
-                    type="text"
-                    required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
-                    placeholder="Shoulder Bolt"
-                >
-            </div>
+        <div id="admin-controls-content">
+            <section class="bg-white rounded-2xl p-6 pb-12 shadow-[0px_0px_12px_0px] shadow-black/10">
+                <h1 class="text-2xl font-semibold text-gray-900">Create Item</h1>
+                <p class="mt-2 text-sm text-gray-600">Create a new inventory item visible in the user view.</p>
 
-            <div>
-                <label for="tag" class="block font-medium text-gray-700 mb-1">Tag</label>
-                <input
-                    id="tag"
-                    name="tag"
-                    type="text"
-                    required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
-                    placeholder="Bolts"
-                >
-            </div>
+                {% if error %}
+                <p class="mt-4 text-red-600 text-sm">{{ error }}</p>
+                {% endif %}
 
-            <div>
-                <label for="stock_remaining" class="block font-medium text-gray-700 mb-1">Stock Remaining</label>
-                <input
-                    id="stock_remaining"
-                    name="stock_remaining"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value="0"
-                    required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
-                >
-            </div>
+                {% if success %}
+                <p class="mt-4 text-green-600 text-sm">{{ success }}</p>
+                {% endif %}
 
-            <div class="sm:col-span-2">
-                <label for="image_file" class="block font-medium text-gray-700 mb-1">Upload Image (optional)</label>
-                <input
-                    id="image_file"
-                    name="image_file"
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.gif,.webp,.svg"
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500 bg-white"
-                >
-            </div>
+                <form method="post" action="{{ url_for('admin') }}" enctype="multipart/form-data" class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div class="sm:col-span-2">
+                        <label for="title" class="block font-medium text-gray-700 mb-1">Title</label>
+                        <input
+                            id="title"
+                            name="title"
+                            type="text"
+                            required
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                            placeholder="Shoulder Bolt"
+                        >
+                    </div>
 
-            <div class="sm:col-span-2">
-                <label for="description" class="block font-medium text-gray-700 mb-1">Description (optional)</label>
-                <textarea
-                    id="description"
-                    name="description"
-                    rows="4"
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
-                    placeholder="Short description..."
-                ></textarea>
-            </div>
+                    <div>
+                        <label for="tag" class="block font-medium text-gray-700 mb-1">Tag</label>
+                        <input
+                            id="tag"
+                            name="tag"
+                            type="text"
+                            required
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                            placeholder="Bolts"
+                        >
+                    </div>
 
-            <div class="sm:col-span-2 flex justify-end">
-                <button
-                    type="submit"
-                    class="bg-slate-500 hover:bg-slate-600/90 text-white px-5 py-2.5 rounded-full transition"
-                >
-                    Create Item
-                </button>
-            </div>
-        </form>
+                    <div>
+                        <label for="stock_remaining" class="block font-medium text-gray-700 mb-1">Stock Remaining</label>
+                        <input
+                            id="stock_remaining"
+                            name="stock_remaining"
+                            type="number"
+                            min="0"
+                            step="1"
+                            value="0"
+                            required
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                        >
+                    </div>
+
+                    <div class="sm:col-span-2">
+                        <label for="image_file" class="block font-medium text-gray-700 mb-1">Upload Image (optional)</label>
+                        <input
+                            id="image_file"
+                            name="image_file"
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.gif,.webp,.svg"
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500 bg-white"
+                        >
+                    </div>
+
+                    <div class="sm:col-span-2">
+                        <label for="description" class="block font-medium text-gray-700 mb-1">Description (optional)</label>
+                        <textarea
+                            id="description"
+                            name="description"
+                            rows="4"
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                            placeholder="Short description..."
+                        ></textarea>
+                    </div>
+
+                    <div class="sm:col-span-2 flex justify-end">
+                        <button
+                            type="submit"
+                            class="bg-slate-500 hover:bg-slate-600/90 text-white px-5 py-2.5 rounded-full transition"
+                        >
+                            Create Item
+                        </button>
+                    </div>
+                </form>
+            </section>
+        </div>
     </section>
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const toggle = document.getElementById("inventory-view-toggle");
+        const content = document.getElementById("inventory-view-content");
+        const syncInventoryVisibility = () => {
+            content.classList.toggle("hidden", !toggle.checked);
+        };
+        if (toggle && content) {
+            toggle.addEventListener("change", syncInventoryVisibility);
+            syncInventoryVisibility();
+        }
+
+        const adminToggle = document.getElementById("admin-controls-toggle");
+        const adminContent = document.getElementById("admin-controls-content");
+        const syncAdminVisibility = () => {
+            adminContent.classList.toggle("hidden", !adminToggle.checked);
+        };
+        if (adminToggle && adminContent) {
+            adminToggle.addEventListener("change", syncAdminVisibility);
+            syncAdminVisibility();
+        }
+    });
+</script>
 {% endblock %}

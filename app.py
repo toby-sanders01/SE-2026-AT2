@@ -80,6 +80,155 @@ def get_items_db_connection():
     return conn
 
 
+def get_visible_items_for_user(user_id):
+    items_conn = get_items_db_connection()
+    items = items_conn.execute(
+        '''
+        SELECT id, image, stock_remaining, title, tag, description
+        FROM items
+        WHERE user_id = ? OR user_id IS NULL
+        ORDER BY id
+        ''',
+        (user_id,)
+    ).fetchall()
+    items_conn.close()
+    return items
+
+
+def normalize_stock_filter(value):
+    stock_filter = (value or 'all').strip().lower()
+    allowed_stock_filters = {'all', 'in-stock', 'low-stock', 'out-of-stock'}
+    if stock_filter not in allowed_stock_filters:
+        return 'all'
+    return stock_filter
+
+
+def filter_items(items, search_query, stock_filter):
+    filtered_items = items
+
+    if search_query:
+        search_lower = search_query.lower()
+        filtered_items = [
+            item for item in filtered_items
+            if search_lower in (item['title'] or '').lower()
+            or search_lower in (item['tag'] or '').lower()
+            or search_lower in (item['description'] or '').lower()
+        ]
+
+    if stock_filter != 'all':
+        stock_filtered = []
+        for item in filtered_items:
+            stock_remaining = item['stock_remaining']
+            status = 'out-of-stock'
+            if stock_remaining > 10:
+                status = 'in-stock'
+            elif stock_remaining > 0:
+                status = 'low-stock'
+
+            if status == stock_filter:
+                stock_filtered.append(item)
+        filtered_items = stock_filtered
+
+    return filtered_items
+
+
+def build_item_modal_state(items):
+    stock_feedback = None
+    modal_item = None
+    stock_status = request.args.get('stock_status', '').strip()
+    modal_item_id_raw = request.args.get('modal_item_id', '').strip()
+    modal_item_id = None
+
+    if modal_item_id_raw:
+        try:
+            parsed_modal_item_id = int(modal_item_id_raw)
+            if parsed_modal_item_id > 0:
+                modal_item_id = parsed_modal_item_id
+        except ValueError:
+            modal_item_id = None
+
+    if modal_item_id is not None:
+        for item in items:
+            if item['id'] == modal_item_id:
+                modal_item = item
+                break
+
+    if stock_status == 'decreased':
+        stock_amount_raw = request.args.get('stock_amount', '').strip()
+        try:
+            stock_amount = int(stock_amount_raw)
+        except ValueError:
+            stock_amount = 0
+
+        if stock_amount > 0:
+            stock_feedback = {
+                "type": "success",
+                "message": f"Stock decreased by {stock_amount}."
+            }
+        else:
+            stock_feedback = {
+                "type": "success",
+                "message": "Stock decreased."
+            }
+    elif stock_status == 'invalid_amount':
+        stock_feedback = {
+            "type": "error",
+            "message": "Enter a whole number greater than 0."
+        }
+    elif stock_status == 'item_not_found':
+        stock_feedback = {
+            "type": "error",
+            "message": "The selected item could not be found."
+        }
+    elif stock_status == 'insufficient':
+        if modal_item:
+            stock_feedback = {
+                "type": "error",
+                "message": f"Only {modal_item['stock_remaining']} items remaining."
+            }
+        else:
+            stock_feedback = {
+                "type": "error",
+                "message": "Decrease amount cannot be more than items remaining."
+            }
+
+    stock_confirmation = None
+    confirm_item_id_raw = request.args.get('confirm_item_id', '').strip()
+    confirm_amount_raw = request.args.get('confirm_amount', '').strip()
+
+    if confirm_item_id_raw and confirm_amount_raw:
+        try:
+            confirm_item_id = int(confirm_item_id_raw)
+            confirm_amount = int(confirm_amount_raw)
+        except ValueError:
+            confirm_item_id = None
+            confirm_amount = None
+
+        if (
+            isinstance(confirm_item_id, int)
+            and isinstance(confirm_amount, int)
+            and confirm_item_id > 0
+            and confirm_amount > 5
+        ):
+            for item in items:
+                if item['id'] == confirm_item_id:
+                    modal_item = item
+                    stock_confirmation = {
+                        "item_id": confirm_item_id,
+                        "amount": confirm_amount,
+                        "item_title": item['title']
+                    }
+                    break
+
+    show_modal_on_load = bool(stock_confirmation or (stock_feedback is not None and modal_item is not None))
+    return {
+        "stock_feedback": stock_feedback,
+        "stock_confirmation": stock_confirmation,
+        "modal_item": modal_item,
+        "show_modal_on_load": show_modal_on_load
+    }
+
+
 # Ensure both tables exist on startup.
 init_users_db()
 init_items_db()
@@ -130,134 +279,18 @@ def user():
     if not user_name:
         user_name = db_user['email'].split('@', 1)[0]
 
-    items_conn = get_items_db_connection()
-    items = items_conn.execute(
-        '''
-        SELECT id, image, stock_remaining, title, tag, description
-        FROM items
-        WHERE user_id = ? OR user_id IS NULL
-        ORDER BY id
-        ''',
-        (db_user['id'],)
-    ).fetchall()
-
     search_query = request.args.get('q', '').strip()
-    stock_filter = request.args.get('stock', 'all').strip().lower()
-    allowed_stock_filters = {'all', 'in-stock', 'low-stock', 'out-of-stock'}
-    if stock_filter not in allowed_stock_filters:
-        stock_filter = 'all'
+    stock_filter = normalize_stock_filter(request.args.get('stock', 'all'))
 
-    if search_query:
-        search_lower = search_query.lower()
-        items = [
-            item for item in items
-            if search_lower in (item['title'] or '').lower()
-            or search_lower in (item['tag'] or '').lower()
-            or search_lower in (item['description'] or '').lower()
-        ]
-
-    if stock_filter != 'all':
-        filtered_items = []
-        for item in items:
-            stock_remaining = item['stock_remaining']
-            status = 'out-of-stock'
-            if stock_remaining > 10:
-                status = 'in-stock'
-            elif stock_remaining > 0:
-                status = 'low-stock'
-
-            if status == stock_filter:
-                filtered_items.append(item)
-        items = filtered_items
-
-    items_conn.close()
-    stock_feedback = None
-    modal_item = None
-    stock_status = request.args.get('stock_status', '').strip()
-    modal_item_id_raw = request.args.get('modal_item_id', '').strip()
-    modal_item_id = None
-
-    if modal_item_id_raw:
-        try:
-            parsed_modal_item_id = int(modal_item_id_raw)
-            if parsed_modal_item_id > 0:
-                modal_item_id = parsed_modal_item_id
-        except ValueError:
-            modal_item_id = None
-
-    if modal_item_id is not None:
-        for item in items:
-            if item['id'] == modal_item_id:
-                modal_item = item
-                break
-
-    if stock_status == 'decreased':
-        stock_amount_raw = request.args.get('stock_amount', '').strip()
-        try:
-            stock_amount = int(stock_amount_raw)
-        except ValueError:
-            stock_amount = 0
-
-        if stock_amount > 0:
-            stock_feedback = {
-                "type": "success",
-                "message": f"Stock decreased by {stock_amount}."
-            }
-        else:
-            stock_feedback = {
-                "type": "success",
-                "message": "Stock decreased."
-            }
-    elif stock_status == 'invalid_amount':
-        stock_feedback = {
-            "type": "error",
-            "message": "Enter a whole number greater than 0."
-        }
-    elif stock_status == 'item_not_found':
-        stock_feedback = {
-            "type": "error",
-            "message": "The selected item could not be found."
-        }
-    elif stock_status == 'insufficient':
-        stock_feedback = {
-            "type": "error",
-            "message": f"Only {modal_item['stock_remaining']} items remaining."
-        }
-
-    stock_confirmation = None
-    confirm_item_id_raw = request.args.get('confirm_item_id', '').strip()
-    confirm_amount_raw = request.args.get('confirm_amount', '').strip()
-
-    if confirm_item_id_raw and confirm_amount_raw:
-        try:
-            confirm_item_id = int(confirm_item_id_raw)
-            confirm_amount = int(confirm_amount_raw)
-        except ValueError:
-            confirm_item_id = None
-            confirm_amount = None
-
-        if (
-            isinstance(confirm_item_id, int)
-            and isinstance(confirm_amount, int)
-            and confirm_item_id > 0
-            and confirm_amount > 5
-        ):
-            for item in items:
-                if item['id'] == confirm_item_id:
-                    modal_item = item
-                    stock_confirmation = {
-                        "item_id": confirm_item_id,
-                        "amount": confirm_amount,
-                        "item_title": item['title']
-                    }
-                    break
+    visible_items = get_visible_items_for_user(db_user['id'])
+    items = filter_items(visible_items, search_query, stock_filter)
+    item_modal_state = build_item_modal_state(items)
 
     users_conn.close()
 
     session['user_email'] = db_user['email']
     session['user_name'] = user_name
     session['is_admin'] = bool(db_user['is_admin'])
-    show_modal_on_load = bool(stock_confirmation or (stock_feedback is not None and modal_item is not None))
     return render_template(
         "user.html",
         show_footer=True,
@@ -266,10 +299,10 @@ def user():
         items=items,
         search_query=search_query,
         selected_stock_filter=stock_filter,
-        stock_feedback=stock_feedback,
-        stock_confirmation=stock_confirmation,
-        modal_item=modal_item,
-        show_modal_on_load=show_modal_on_load
+        stock_feedback=item_modal_state['stock_feedback'],
+        stock_confirmation=item_modal_state['stock_confirmation'],
+        modal_item=item_modal_state['modal_item'],
+        show_modal_on_load=item_modal_state['show_modal_on_load']
     )
 
 
@@ -292,20 +325,26 @@ def decrease_stock():
     item_id_raw = request.form.get('item_id', '').strip()
     decrease_amount_raw = request.form.get('decrease_amount', '').strip()
     confirm_large = request.form.get('confirm_large', '').strip() == '1'
+    return_endpoint = request.form.get('return_endpoint', 'user').strip()
+    if return_endpoint not in {'user', 'admin'}:
+        return_endpoint = 'user'
+
+    def redirect_back(**params):
+        return redirect(url_for(return_endpoint, **params))
 
     try:
         item_id = int(item_id_raw)
         if item_id < 1:
             raise ValueError
     except ValueError:
-        return redirect(url_for('user', stock_status='invalid_amount'))
+        return redirect_back(stock_status='invalid_amount')
 
     try:
         decrease_amount = int(decrease_amount_raw)
         if decrease_amount < 1:
             raise ValueError
     except ValueError:
-        return redirect(url_for('user', stock_status='invalid_amount', modal_item_id=item_id))
+        return redirect_back(stock_status='invalid_amount', modal_item_id=item_id)
 
     items_conn = get_items_db_connection()
     item = items_conn.execute(
@@ -319,15 +358,15 @@ def decrease_stock():
 
     if not item:
         items_conn.close()
-        return redirect(url_for('user', stock_status='item_not_found'))
+        return redirect_back(stock_status='item_not_found')
 
     if decrease_amount > item['stock_remaining']:
         items_conn.close()
-        return redirect(url_for('user', stock_status='insufficient', modal_item_id=item_id))
+        return redirect_back(stock_status='insufficient', modal_item_id=item_id)
 
     if decrease_amount > 5 and not confirm_large:
         items_conn.close()
-        return redirect(url_for('user', confirm_item_id=item_id, confirm_amount=decrease_amount))
+        return redirect_back(confirm_item_id=item_id, confirm_amount=decrease_amount)
 
     items_conn.execute(
         'UPDATE items SET stock_remaining = stock_remaining - ? WHERE id = ?',
@@ -336,14 +375,7 @@ def decrease_stock():
     items_conn.commit()
     items_conn.close()
 
-    return redirect(
-        url_for(
-            'user',
-            stock_status='decreased',
-            stock_amount=decrease_amount,
-            modal_item_id=item_id
-        )
-    )
+    return redirect_back(stock_status='decreased', stock_amount=decrease_amount, modal_item_id=item_id)
 
 
 @app.route('/admin', methods=['GET', 'POST'])
@@ -432,11 +464,29 @@ def admin():
                 error = 'Could not save uploaded image file.'
             items_conn.close()
 
+    search_query = request.args.get('q', '').strip()
+    stock_filter = normalize_stock_filter(request.args.get('stock', 'all'))
+    visible_items = get_visible_items_for_user(db_user['id'])
+    items = filter_items(visible_items, search_query, stock_filter)
+    item_modal_state = build_item_modal_state(items)
+
     users_conn.close()
     session['user_email'] = db_user['email']
     session['user_name'] = user_name
     session['is_admin'] = bool(db_user['is_admin'])
-    return render_template("admin.html", show_footer=True, error=error, success=success)
+    return render_template(
+        "admin.html",
+        show_footer=True,
+        error=error,
+        success=success,
+        items=items,
+        search_query=search_query,
+        selected_stock_filter=stock_filter,
+        stock_feedback=item_modal_state['stock_feedback'],
+        stock_confirmation=item_modal_state['stock_confirmation'],
+        modal_item=item_modal_state['modal_item'],
+        show_modal_on_load=item_modal_state['show_modal_on_load']
+    )
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -468,7 +518,10 @@ def login():
                 session['user_id'] = user['id']
                 session['user_email'] = user['email']
                 session['user_name'] = display_name
-                session['is_admin'] = bool(user['is_admin'])
+                is_admin = bool(user['is_admin'])
+                session['is_admin'] = is_admin
+                if is_admin:
+                    return redirect(url_for('admin'))
                 return redirect(url_for('user'))
 
             error = 'Incorrect password.'
