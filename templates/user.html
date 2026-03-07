@@ -10,26 +10,26 @@
                 {% if item['image'] %}
                     {% if item['image'].startswith('/') %}
                         {% set image_src = item['image'] %}
-                    {% elif item['image'].startswith('http://') or item['image'].startswith('https://') %}
-                        {% set image_src = item['image'] %}
-                    {% else %}
-                        {% set image_src = url_for('static', filename=item['image']) %}
-                    {% endif %}
                 {% else %}
-                    {% set image_src = url_for('static', filename='small-logo.png') %}
+                    {% set image_src = url_for('static', filename='placeholder.png') %}
+                {% endif %}
                 {% endif %}
                 <img
                     src="{{ image_src }}"
                     alt="{{ item['title'] }} image"
-                    class="h-20 w-20 rounded-xl object-cover bg-gray-100 p-2"
+                    class="h-20 w-20 rounded-xl object-contain bg-gray-75 p-2" 
                 >
 
                 <div class="flex-1 space-y-2">
                     <h3 class="text-lg font-semibold text-gray-900">{{ item['title'] }}</h3>
                     <p class="text-sm font-medium text-gray-500">{{ item['tag'] }}</p>
-                    {% if item['stock_remaining'] > 0 %}
+                    {% if item['stock_remaining'] > 10 %}
                     <div class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                         In Stock
+                    </div>
+                    {% elif item['stock_remaining'] > 0 %}
+                    <div class="inline-flex items-center rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                        Low Stock
                     </div>
                     {% else %}
                     <div class="inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
@@ -87,7 +87,7 @@
                 id="item-modal-image"
                 src="{{ url_for('static', filename='small-logo.png') }}"
                 alt="Item image"
-                class="h-40 w-40 rounded-xl object-cover bg-gray-100 p-2 shrink-0"
+                class="h-40 w-40 rounded-xl object-contain bg-gray-100 p-2 shrink-0"
             >
             <div class="space-y-3">
                 <p><span class="font-semibold text-gray-900">Tag:</span> <span id="item-modal-tag">-</span></p>
