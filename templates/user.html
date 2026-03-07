@@ -2,22 +2,19 @@
 
 {% block body %}
 <div class="space-y-6">
-
     <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {% for item in items %}
         <article class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
             <div class="flex items-start gap-4">
-                {% if item['image'] %}
-                    {% if item['image'].startswith('/') %}
-                        {% set image_src = item['image'] %}
-                {% else %}
-                    {% set image_src = url_for('static', filename='placeholder.png') %}
+                {% set image_src = url_for('static', filename='placeholder.png') %}
+                {% if item['image'] and item['image'].startswith('/') %}
+                    {% set image_src = item['image'] %}
                 {% endif %}
-                {% endif %}
+
                 <img
                     src="{{ image_src }}"
                     alt="{{ item['title'] }} image"
-                    class="h-20 w-20 rounded-xl object-contain bg-gray-75 p-2" 
+                    class="h-20 w-20 rounded-xl object-contain bg-gray-75 p-2"
                 >
 
                 <div class="flex-1 space-y-2">
@@ -40,6 +37,7 @@
                     <button
                         type="button"
                         data-modal-open
+                        data-item-id="{{ item['id'] }}"
                         data-item-title="{{ item['title'] }}"
                         data-item-tag="{{ item['tag'] }}"
                         data-item-stock="{{ item['stock_remaining'] }}"
@@ -60,10 +58,34 @@
     </section>
 </div>
 
+{% set modal_title_text = "Item Details" %}
+{% set modal_tag_text = "-" %}
+{% set modal_status_text = "-" %}
+{% set modal_stock_text = "-" %}
+{% set modal_description_text = "-" %}
+{% set modal_image_src = url_for('static', filename='small-logo.png') %}
+
+{% if modal_item %}
+    {% set modal_title_text = modal_item['title'] %}
+    {% set modal_tag_text = modal_item['tag'] %}
+    {% set modal_stock_text = modal_item['stock_remaining'] %}
+    {% set modal_description_text = modal_item['description'] %}
+    {% if modal_item['stock_remaining'] > 0 %}
+        {% set modal_status_text = "In Stock" %}
+    {% else %}
+        {% set modal_status_text = "Out of Stock" %}
+    {% endif %}
+    {% if modal_item['image'] and modal_item['image'].startswith('/') %}
+        {% set modal_image_src = modal_item['image'] %}
+    {% else %}
+        {% set modal_image_src = url_for('static', filename='placeholder.png') %}
+    {% endif %}
+{% endif %}
+
 <div
     id="item-modal-overlay"
-    class="fixed inset-0 z-40 hidden items-center justify-center bg-black/25 backdrop-blur-sm p-4"
-    aria-hidden="true"
+    class="fixed inset-0 z-40 {% if show_modal_on_load %}flex{% else %}hidden{% endif %} items-center justify-center bg-black/25 backdrop-blur-sm p-4"
+    aria-hidden="{% if show_modal_on_load %}false{% else %}true{% endif %}"
 >
     <div
         role="dialog"
@@ -72,7 +94,7 @@
         class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
     >
         <div class="flex items-start justify-between gap-4">
-            <h2 id="item-modal-title" class="text-xl font-semibold text-gray-900">Item Details</h2>
+            <h2 id="item-modal-title" class="text-xl font-semibold text-gray-900">{{ modal_title_text }}</h2>
             <button
                 type="button"
                 data-modal-close
@@ -82,27 +104,90 @@
             </button>
         </div>
 
+        {% if stock_feedback and show_modal_on_load %}
+        <p id="item-modal-feedback" class="mt-4 rounded-xl px-4 py-3 text-sm font-medium {% if stock_feedback['type'] == 'success' %}bg-emerald-100 text-emerald-800{% else %}bg-rose-100 text-rose-700{% endif %}">
+            {{ stock_feedback['message'] }}
+        </p>
+        {% endif %}
+
         <div class="mt-4 flex flex-col sm:flex-row items-start gap-6 text-sm text-gray-700">
             <img
                 id="item-modal-image"
-                src="{{ url_for('static', filename='small-logo.png') }}"
+                src="{{ modal_image_src }}"
                 alt="Item image"
                 class="h-40 w-40 rounded-xl object-contain bg-gray-100 p-2 shrink-0"
             >
             <div class="space-y-3">
-                <p><span class="font-semibold text-gray-900">Tag:</span> <span id="item-modal-tag">-</span></p>
-                <p><span class="font-semibold text-gray-900">Status:</span> <span id="item-modal-status">-</span></p>
-                <p><span class="font-semibold text-gray-900">Items Remaining:</span> <span id="item-modal-stock">-</span></p>
-                <p><span class="font-semibold text-gray-900">Description:</span> <span id="item-modal-description">-</span></p>
+                <p><span class="font-semibold text-gray-900">Tag:</span> <span id="item-modal-tag">{{ modal_tag_text }}</span></p>
+                <p><span class="font-semibold text-gray-900">Status:</span> <span id="item-modal-status">{{ modal_status_text }}</span></p>
+                <p><span class="font-semibold text-gray-900">Items Remaining:</span> <span id="item-modal-stock">{{ modal_stock_text }}</span></p>
+                <p><span class="font-semibold text-gray-900">Description:</span> <span id="item-modal-description">{{ modal_description_text }}</span></p>
             </div>
         </div>
+
+        <form method="post" action="{{ url_for('decrease_stock') }}" class="mt-5 space-y-3 border-t border-gray-200 pt-4">
+            <input
+                type="hidden"
+                id="item-modal-id"
+                name="item_id"
+                value="{% if stock_confirmation %}{{ stock_confirmation['item_id'] }}{% elif modal_item %}{{ modal_item['id'] }}{% endif %}"
+            >
+
+            <div>
+                <label for="decrease_amount" class="block text-sm font-medium text-gray-700 mb-1">Decrease amount</label>
+                <input
+                    id="decrease_amount"
+                    name="decrease_amount"
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    value="{% if stock_confirmation %}{{ stock_confirmation['amount'] }}{% endif %}"
+                    class="w-half border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                >
+            </div>
+
+            <button
+                type="submit"
+                class="inline-flex items-center rounded-full bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600/90 transition-colors"
+            >
+                Decrease stock
+            </button>
+        </form>
+
+        {% if stock_confirmation %}
+        <div id="item-modal-confirmation" class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <p class="font-semibold">Confirm decrease</p>
+            <p class="mt-1">
+                You entered {{ stock_confirmation['amount'] }} for {{ stock_confirmation['item_title'] }}.
+                Confirm this decrease because the amount is greater than 5.
+            </p>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <form method="post" action="{{ url_for('decrease_stock') }}">
+                    <input type="hidden" name="item_id" value="{{ stock_confirmation['item_id'] }}">
+                    <input type="hidden" name="decrease_amount" value="{{ stock_confirmation['amount'] }}">
+                    <input type="hidden" name="confirm_large" value="1">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
+                    >
+                        Confirm decrease
+                    </button>
+                </form>
+                <a
+                    href="{{ url_for('user') }}"
+                    class="inline-flex items-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white transition-colors"
+                >
+                    Cancel
+                </a>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
 <script>
     document.addEventListener("DOMContentLoaded", () => {
-        const welcomeSection = document.getElementById("welcome-section");
-        const welcomeCard = document.getElementById("welcome-card");
         const modalOverlay = document.getElementById("item-modal-overlay");
         const modalOpenButtons = document.querySelectorAll("[data-modal-open]");
         const modalCloseButtons = document.querySelectorAll("[data-modal-close]");
@@ -113,9 +198,23 @@
         const modalStatus = document.getElementById("item-modal-status");
         const modalStock = document.getElementById("item-modal-stock");
         const modalDescription = document.getElementById("item-modal-description");
+        const modalItemIdInput = document.getElementById("item-modal-id");
+        const decreaseAmountInput = document.getElementById("decrease_amount");
+        const modalFeedback = document.getElementById("item-modal-feedback");
+        const modalConfirmation = document.getElementById("item-modal-confirmation");
+
+        const clearModalFeedback = () => {
+            if (modalFeedback) modalFeedback.remove();
+        };
+
+        const clearModalConfirmation = () => {
+            if (modalConfirmation) modalConfirmation.remove();
+        };
 
         const openModal = (button) => {
             if (!modalOverlay) return;
+            clearModalFeedback();
+            clearModalConfirmation();
 
             const stockCount = Number.parseInt(button.dataset.itemStock || "0", 10);
             const inStock = Number.isFinite(stockCount) && stockCount > 0;
@@ -129,6 +228,8 @@
             if (modalStatus) modalStatus.textContent = inStock ? "In Stock" : "Out of Stock";
             if (modalStock) modalStock.textContent = Number.isFinite(stockCount) ? stockCount.toString() : "0";
             if (modalDescription) modalDescription.textContent = button.dataset.itemDescription || "-";
+            if (modalItemIdInput) modalItemIdInput.value = button.dataset.itemId || "";
+            if (decreaseAmountInput) decreaseAmountInput.value = "";
 
             modalOverlay.classList.remove("hidden");
             modalOverlay.classList.add("flex");
@@ -137,9 +238,25 @@
 
         const closeModal = () => {
             if (!modalOverlay) return;
+            clearModalFeedback();
+            clearModalConfirmation();
             modalOverlay.classList.add("hidden");
             modalOverlay.classList.remove("flex");
             modalOverlay.setAttribute("aria-hidden", "true");
+
+            const currentUrl = new URL(window.location.href);
+            const paramsToClear = [
+                "stock_status",
+                "stock_amount",
+                "modal_item_id",
+                "confirm_item_id",
+                "confirm_amount"
+            ];
+            paramsToClear.forEach((param) => currentUrl.searchParams.delete(param));
+
+            const search = currentUrl.searchParams.toString();
+            const nextUrl = search ? `${currentUrl.pathname}?${search}` : currentUrl.pathname;
+            window.history.replaceState({}, "", nextUrl);
         };
 
         modalOpenButtons.forEach((button) => {
