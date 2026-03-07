@@ -8,7 +8,7 @@
                 type="text"
                 value="{{ search_query or '' }}"
                 placeholder="Search by title, tag, or description"
-                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
             >
         </div>
         <div class="md:col-span-3">
@@ -16,7 +16,8 @@
             <select
                 id="stock-filter"
                 name="stock"
-                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white"
+                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500 bg-white"
+                oninput="form.submit()"
             >
                 <option value="all" {% if selected_stock_filter == 'all' %}selected{% endif %}>All</option>
                 <option value="in-stock" {% if selected_stock_filter == 'in-stock' %}selected{% endif %}>In Stock</option>
@@ -27,7 +28,7 @@
         <div class="md:col-span-2 flex gap-2">
             <button
                 type="submit"
-                class="w-full inline-flex items-center justify-center rounded-full bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-600/90 transition-colors"
+                class="w-full inline-flex items-center justify-center rounded-full bg-slate-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-600/90 transition-colors"
             >
                 Apply
             </button>

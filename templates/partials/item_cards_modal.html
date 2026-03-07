@@ -86,7 +86,7 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="item-modal-title"
-        class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
+        class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
     >
         <div class="flex items-start justify-between gap-4">
             <h2 id="item-modal-title" class="text-xl font-semibold text-gray-900">{{ modal_title_text }}</h2>
@@ -139,13 +139,13 @@
                     step="1"
                     required
                     value="{% if stock_confirmation %}{{ stock_confirmation['amount'] }}{% endif %}"
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
                 >
             </div>
 
             <button
                 type="submit"
-                class="inline-flex items-center rounded-full bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600/90 transition-colors"
+                class="inline-flex items-center rounded-full bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600/90 transition-colors"
             >
                 Decrease stock
             </button>
@@ -178,6 +178,176 @@
                     Cancel
                 </a>
             </div>
+        </details>
+        {% endif %}
+
+        {% if current_user_is_admin %}
+        <details class="mt-6 border-t border-gray-200 pt-4 space-y-4">
+            <summary class="inline-flex cursor-pointer list-none items-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Admin Actions
+            </summary>
+
+            <div class="pt-3 space-y-4">
+            <form method="post" action="{{ url_for('add_stock') }}" class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                <input
+                    type="hidden"
+                    id="item-modal-admin-add-item-id"
+                    name="item_id"
+                    value="{% if action_confirmation and action_confirmation['action'] == 'add' %}{{ action_confirmation['item_id'] }}{% elif modal_item %}{{ modal_item['id'] }}{% endif %}"
+                >
+                <div>
+                    <label for="add_amount" class="block text-sm font-medium text-gray-700 mb-1">Add stock amount</label>
+                    <input
+                        id="add_amount"
+                        name="add_amount"
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                        value="{% if action_confirmation and action_confirmation['action'] == 'add' %}{{ action_confirmation['amount'] }}{% endif %}"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                    >
+                </div>
+                <button
+                    type="submit"
+                    class="inline-flex items-center justify-center rounded-full bg-emerald-600 px-6 py-3 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                >
+                    Add stock
+                </button>
+            </form>
+
+            <form method="post" action="{{ url_for('edit_item') }}" class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                <input
+                    type="hidden"
+                    id="item-modal-admin-edit-item-id"
+                    name="item_id"
+                    value="{% if action_confirmation and action_confirmation['action'] == 'edit' %}{{ action_confirmation['item_id'] }}{% elif modal_item %}{{ modal_item['id'] }}{% endif %}"
+                >
+                <div>
+                    <label for="admin_edit_title" class="block text-sm font-medium text-gray-700 mb-1">Edit title</label>
+                    <input
+                        id="admin_edit_title"
+                        name="title"
+                        type="text"
+                        required
+                        value="{% if action_confirmation and action_confirmation['action'] == 'edit' %}{{ action_confirmation['title'] }}{% elif modal_item %}{{ modal_item['title'] }}{% endif %}"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                    >
+                </div>
+                <div class="sm:col-span-1">
+                    <label for="admin_edit_tag" class="block text-sm font-medium text-gray-700 mb-1">Edit tag</label>
+                    <input
+                        id="admin_edit_tag"
+                        name="tag"
+                        type="text"
+                        required
+                        value="{% if action_confirmation and action_confirmation['action'] == 'edit' %}{{ action_confirmation['tag'] }}{% elif modal_item %}{{ modal_item['tag'] }}{% endif %}"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                    >
+                </div>
+                <div class="sm:col-span-2">
+                    <label for="admin_edit_description" class="block text-sm font-medium text-gray-700 mb-1">Edit description</label>
+                    <textarea
+                        id="admin_edit_description"
+                        name="description"
+                        rows="3"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+                    >{% if action_confirmation and action_confirmation['action'] == 'edit' %}{{ action_confirmation['description'] }}{% elif modal_item %}{{ modal_item['description'] }}{% endif %}</textarea>
+                </div>
+                <button
+                    type="submit"
+                    class="sm:col-span-2 inline-flex items-center justify-center rounded-full bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+                >
+                    Apply Changes
+                </button>
+            </form>
+
+            <form method="post" action="{{ url_for('delete_item') }}" class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                <input
+                    type="hidden"
+                    id="item-modal-admin-delete-item-id"
+                    name="item_id"
+                    value="{% if action_confirmation and action_confirmation['action'] == 'delete' %}{{ action_confirmation['item_id'] }}{% elif modal_item %}{{ modal_item['id'] }}{% endif %}"
+                >
+                <button
+                    type="submit"
+                    class="sm:col-span-2 inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
+                >
+                    Delete item
+                </button>
+            </form>
+            </div>
+        </details>
+        {% endif %}
+
+        {% if action_confirmation %}
+        <div id="item-modal-action-confirmation" class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            {% if action_confirmation['action'] == 'add' %}
+            <p class="font-semibold">Confirm stock increase</p>
+            <p class="mt-1">
+                Add {{ action_confirmation['amount'] }} stock to {{ modal_item['title'] }}?
+            </p>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <form method="post" action="{{ url_for('add_stock') }}">
+                    <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                    <input type="hidden" name="item_id" value="{{ action_confirmation['item_id'] }}">
+                    <input type="hidden" name="add_amount" value="{{ action_confirmation['amount'] }}">
+                    <input type="hidden" name="confirm_action" value="1">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
+                    >
+                        Confirm add stock
+                    </button>
+                </form>
+            {% elif action_confirmation['action'] == 'edit' %}
+            <p class="font-semibold">Confirm item edit</p>
+            <p class="mt-1">
+                Apply these edits to {{ modal_item['title'] }}?
+            </p>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <form method="post" action="{{ url_for('edit_item') }}">
+                    <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                    <input type="hidden" name="item_id" value="{{ action_confirmation['item_id'] }}">
+                    <input type="hidden" name="title" value="{{ action_confirmation['title'] }}">
+                    <input type="hidden" name="tag" value="{{ action_confirmation['tag'] }}">
+                    <input type="hidden" name="description" value="{{ action_confirmation['description'] }}">
+                    <input type="hidden" name="confirm_action" value="1">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
+                    >
+                        Confirm edit
+                    </button>
+                </form>
+            {% elif action_confirmation['action'] == 'delete' %}
+            <p class="font-semibold">Confirm item deletion</p>
+            <p class="mt-1">
+                Delete {{ modal_item['title'] }} permanently?
+            </p>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+                <form method="post" action="{{ url_for('delete_item') }}">
+                    <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                    <input type="hidden" name="item_id" value="{{ action_confirmation['item_id'] }}">
+                    <input type="hidden" name="confirm_action" value="1">
+                    <button
+                        type="submit"
+                        class="inline-flex items-center rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
+                    >
+                        Confirm delete
+                    </button>
+                </form>
+            {% endif %}
+                <a
+                    href="{{ url_for(request.endpoint) }}"
+                    class="inline-flex items-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white transition-colors"
+                >
+                    Cancel
+                </a>
+            </div>
         </div>
         {% endif %}
     </div>
@@ -197,8 +367,16 @@
         const modalDescription = document.getElementById("item-modal-description");
         const modalItemIdInput = document.getElementById("item-modal-id");
         const decreaseAmountInput = document.getElementById("decrease_amount");
+        const addAmountInput = document.getElementById("add_amount");
+        const adminEditTitle = document.getElementById("admin_edit_title");
+        const adminEditTag = document.getElementById("admin_edit_tag");
+        const adminEditDescription = document.getElementById("admin_edit_description");
+        const adminAddItemIdInput = document.getElementById("item-modal-admin-add-item-id");
+        const adminEditItemIdInput = document.getElementById("item-modal-admin-edit-item-id");
+        const adminDeleteItemIdInput = document.getElementById("item-modal-admin-delete-item-id");
         const modalFeedback = document.getElementById("item-modal-feedback");
         const modalConfirmation = document.getElementById("item-modal-confirmation");
+        const modalActionConfirmation = document.getElementById("item-modal-action-confirmation");
 
         const clearModalFeedback = () => {
             if (modalFeedback) modalFeedback.remove();
@@ -208,10 +386,15 @@
             if (modalConfirmation) modalConfirmation.remove();
         };
 
+        const clearModalActionConfirmation = () => {
+            if (modalActionConfirmation) modalActionConfirmation.remove();
+        };
+
         const openModal = (button) => {
             if (!modalOverlay) return;
             clearModalFeedback();
             clearModalConfirmation();
+            clearModalActionConfirmation();
 
             const stockCount = Number.parseInt(button.dataset.itemStock || "0", 10);
             const inStock = Number.isFinite(stockCount) && stockCount > 0;
@@ -227,6 +410,13 @@
             if (modalDescription) modalDescription.textContent = button.dataset.itemDescription || "-";
             if (modalItemIdInput) modalItemIdInput.value = button.dataset.itemId || "";
             if (decreaseAmountInput) decreaseAmountInput.value = "";
+            if (addAmountInput) addAmountInput.value = "";
+            if (adminEditTitle) adminEditTitle.value = button.dataset.itemTitle || "";
+            if (adminEditTag) adminEditTag.value = button.dataset.itemTag || "";
+            if (adminEditDescription) adminEditDescription.value = button.dataset.itemDescription || "";
+            if (adminAddItemIdInput) adminAddItemIdInput.value = button.dataset.itemId || "";
+            if (adminEditItemIdInput) adminEditItemIdInput.value = button.dataset.itemId || "";
+            if (adminDeleteItemIdInput) adminDeleteItemIdInput.value = button.dataset.itemId || "";
 
             modalOverlay.classList.remove("hidden");
             modalOverlay.classList.add("flex");
@@ -237,6 +427,7 @@
             if (!modalOverlay) return;
             clearModalFeedback();
             clearModalConfirmation();
+            clearModalActionConfirmation();
             modalOverlay.classList.add("hidden");
             modalOverlay.classList.remove("flex");
             modalOverlay.setAttribute("aria-hidden", "true");
@@ -247,7 +438,13 @@
                 "stock_amount",
                 "modal_item_id",
                 "confirm_item_id",
-                "confirm_amount"
+                "confirm_amount",
+                "pending_action",
+                "pending_item_id",
+                "pending_amount",
+                "pending_title",
+                "pending_tag",
+                "pending_description"
             ];
             paramsToClear.forEach((param) => currentUrl.searchParams.delete(param));
 

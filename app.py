@@ -135,6 +135,7 @@ def filter_items(items, search_query, stock_filter):
 def build_item_modal_state(items):
     stock_feedback = None
     modal_item = None
+    action_confirmation = None
     stock_status = request.args.get('stock_status', '').strip()
     modal_item_id_raw = request.args.get('modal_item_id', '').strip()
     modal_item_id = None
@@ -180,6 +181,12 @@ def build_item_modal_state(items):
             "type": "error",
             "message": "The selected item could not be found."
         }
+    elif stock_status == 'zero':
+        if modal_item:
+            stock_feedback = {
+                "type": "error",
+                "message": "No items remaining."
+            }
     elif stock_status == 'insufficient':
         if modal_item:
             stock_feedback = {
@@ -191,6 +198,32 @@ def build_item_modal_state(items):
                 "type": "error",
                 "message": "Decrease amount cannot be more than items remaining."
             }
+    elif stock_status == 'added':
+        stock_amount_raw = request.args.get('stock_amount', '').strip()
+        try:
+            stock_amount = int(stock_amount_raw)
+        except ValueError:
+            stock_amount = 0
+        if stock_amount > 0:
+            stock_feedback = {
+                "type": "success",
+                "message": f"Stock increased by {stock_amount}."
+            }
+        else:
+            stock_feedback = {
+                "type": "success",
+                "message": "Stock increased."
+            }
+    elif stock_status == 'edited':
+        stock_feedback = {
+            "type": "success",
+            "message": "Item updated successfully."
+        }
+    elif stock_status == 'deleted':
+        stock_feedback = {
+            "type": "success",
+            "message": "Item deleted successfully."
+        }
 
     stock_confirmation = None
     confirm_item_id_raw = request.args.get('confirm_item_id', '').strip()
@@ -220,10 +253,56 @@ def build_item_modal_state(items):
                     }
                     break
 
-    show_modal_on_load = bool(stock_confirmation or (stock_feedback is not None and modal_item is not None))
+    pending_action = request.args.get('pending_action', '').strip()
+    pending_item_id_raw = request.args.get('pending_item_id', '').strip()
+    if pending_action and pending_item_id_raw:
+        try:
+            pending_item_id = int(pending_item_id_raw)
+        except ValueError:
+            pending_item_id = None
+
+        if isinstance(pending_item_id, int) and pending_item_id > 0:
+            for item in items:
+                if item['id'] == pending_item_id:
+                    modal_item = item
+                    break
+
+        if modal_item:
+            if pending_action == 'add':
+                pending_amount_raw = request.args.get('pending_amount', '').strip()
+                try:
+                    pending_amount = int(pending_amount_raw)
+                except ValueError:
+                    pending_amount = None
+                if isinstance(pending_amount, int) and pending_amount > 0:
+                    action_confirmation = {
+                        "action": "add",
+                        "item_id": pending_item_id,
+                        "amount": pending_amount
+                    }
+            elif pending_action == 'edit':
+                action_confirmation = {
+                    "action": "edit",
+                    "item_id": pending_item_id,
+                    "title": request.args.get('pending_title', '').strip(),
+                    "tag": request.args.get('pending_tag', '').strip(),
+                    "description": request.args.get('pending_description', '').strip()
+                }
+            elif pending_action == 'delete':
+                action_confirmation = {
+                    "action": "delete",
+                    "item_id": pending_item_id
+                }
+
+    show_modal_on_load = bool(
+        stock_confirmation
+        or action_confirmation
+        or (stock_feedback is not None and modal_item is not None)
+    )
     return {
         "stock_feedback": stock_feedback,
         "stock_confirmation": stock_confirmation,
+        "action_confirmation": action_confirmation,
         "modal_item": modal_item,
         "show_modal_on_load": show_modal_on_load
     }
@@ -301,6 +380,7 @@ def user():
         selected_stock_filter=stock_filter,
         stock_feedback=item_modal_state['stock_feedback'],
         stock_confirmation=item_modal_state['stock_confirmation'],
+        action_confirmation=item_modal_state['action_confirmation'],
         modal_item=item_modal_state['modal_item'],
         show_modal_on_load=item_modal_state['show_modal_on_load']
     )
@@ -359,10 +439,15 @@ def decrease_stock():
     if not item:
         items_conn.close()
         return redirect_back(stock_status='item_not_found')
+    
+    if item['stock_remaining'] == 0:
+        items_conn.close()
+        return redirect_back(stock_status='zero', modal_item_id=item_id)
 
     if decrease_amount > item['stock_remaining']:
         items_conn.close()
         return redirect_back(stock_status='insufficient', modal_item_id=item_id)
+
 
     if decrease_amount > 5 and not confirm_large:
         items_conn.close()
@@ -376,6 +461,214 @@ def decrease_stock():
     items_conn.close()
 
     return redirect_back(stock_status='decreased', stock_amount=decrease_amount, modal_item_id=item_id)
+
+
+@app.route('/add-stock', methods=['POST'])
+def add_stock():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+    users_conn.close()
+
+    if not db_user:
+        session.clear()
+        return redirect(url_for('login'))
+    if not db_user['is_admin']:
+        return redirect(url_for('user'))
+
+    item_id_raw = request.form.get('item_id', '').strip()
+    add_amount_raw = request.form.get('add_amount', '').strip()
+    confirm_action = request.form.get('confirm_action', '').strip() == '1'
+    return_endpoint = request.form.get('return_endpoint', 'admin').strip()
+    if return_endpoint not in {'user', 'admin'}:
+        return_endpoint = 'admin'
+
+    def redirect_back(**params):
+        return redirect(url_for(return_endpoint, **params))
+
+    try:
+        item_id = int(item_id_raw)
+        add_amount = int(add_amount_raw)
+        if item_id < 1 or add_amount < 1:
+            raise ValueError
+    except ValueError:
+        return redirect_back(stock_status='invalid_amount', modal_item_id=item_id_raw)
+
+    items_conn = get_items_db_connection()
+    item = items_conn.execute(
+        '''
+        SELECT id
+        FROM items
+        WHERE id = ? AND (user_id = ? OR user_id IS NULL)
+        ''',
+        (item_id, db_user['id'])
+    ).fetchone()
+
+    if not item:
+        items_conn.close()
+        return redirect_back(stock_status='item_not_found')
+
+    if not confirm_action:
+        items_conn.close()
+        return redirect_back(
+            pending_action='add',
+            pending_item_id=item_id,
+            pending_amount=add_amount
+        )
+
+    items_conn.execute(
+        'UPDATE items SET stock_remaining = stock_remaining + ? WHERE id = ?',
+        (add_amount, item_id)
+    )
+    items_conn.commit()
+    items_conn.close()
+    return redirect_back(stock_status='added', stock_amount=add_amount, modal_item_id=item_id)
+
+
+@app.route('/edit-item', methods=['POST'])
+def edit_item():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+    users_conn.close()
+
+    if not db_user:
+        session.clear()
+        return redirect(url_for('login'))
+    if not db_user['is_admin']:
+        return redirect(url_for('user'))
+
+    item_id_raw = request.form.get('item_id', '').strip()
+    title = request.form.get('title', '').strip()
+    tag = request.form.get('tag', '').strip()
+    description = request.form.get('description', '').strip()
+    confirm_action = request.form.get('confirm_action', '').strip() == '1'
+    return_endpoint = request.form.get('return_endpoint', 'admin').strip()
+    if return_endpoint not in {'user', 'admin'}:
+        return_endpoint = 'admin'
+
+    def redirect_back(**params):
+        return redirect(url_for(return_endpoint, **params))
+
+    try:
+        item_id = int(item_id_raw)
+        if item_id < 1:
+            raise ValueError
+    except ValueError:
+        return redirect_back(stock_status='item_not_found')
+
+    if not title or not tag:
+        return redirect_back(stock_status='invalid_amount', modal_item_id=item_id)
+
+    items_conn = get_items_db_connection()
+    item = items_conn.execute(
+        '''
+        SELECT id
+        FROM items
+        WHERE id = ? AND (user_id = ? OR user_id IS NULL)
+        ''',
+        (item_id, db_user['id'])
+    ).fetchone()
+
+    if not item:
+        items_conn.close()
+        return redirect_back(stock_status='item_not_found')
+
+    if not confirm_action:
+        items_conn.close()
+        return redirect_back(
+            pending_action='edit',
+            pending_item_id=item_id,
+            pending_title=title,
+            pending_tag=tag,
+            pending_description=description
+        )
+
+    items_conn.execute(
+        '''
+        UPDATE items
+        SET title = ?, tag = ?, description = ?
+        WHERE id = ?
+        ''',
+        (title, tag, description, item_id)
+    )
+    items_conn.commit()
+    items_conn.close()
+    return redirect_back(stock_status='edited', modal_item_id=item_id)
+
+
+@app.route('/delete-item', methods=['POST'])
+def delete_item():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+    users_conn.close()
+
+    if not db_user:
+        session.clear()
+        return redirect(url_for('login'))
+    if not db_user['is_admin']:
+        return redirect(url_for('user'))
+
+    item_id_raw = request.form.get('item_id', '').strip()
+    confirm_action = request.form.get('confirm_action', '').strip() == '1'
+    return_endpoint = request.form.get('return_endpoint', 'admin').strip()
+    if return_endpoint not in {'user', 'admin'}:
+        return_endpoint = 'admin'
+
+    def redirect_back(**params):
+        return redirect(url_for(return_endpoint, **params))
+
+    try:
+        item_id = int(item_id_raw)
+        if item_id < 1:
+            raise ValueError
+    except ValueError:
+        return redirect_back(stock_status='item_not_found')
+
+    items_conn = get_items_db_connection()
+    item = items_conn.execute(
+        '''
+        SELECT id
+        FROM items
+        WHERE id = ? AND (user_id = ? OR user_id IS NULL)
+        ''',
+        (item_id, db_user['id'])
+    ).fetchone()
+
+    if not item:
+        items_conn.close()
+        return redirect_back(stock_status='item_not_found')
+
+    if not confirm_action:
+        items_conn.close()
+        return redirect_back(
+            pending_action='delete',
+            pending_item_id=item_id
+        )
+
+    items_conn.execute(
+        'DELETE FROM items WHERE id = ?',
+        (item_id,)
+    )
+    items_conn.commit()
+    items_conn.close()
+    return redirect_back(stock_status='deleted')
 
 
 @app.route('/admin', methods=['GET', 'POST'])
@@ -484,6 +777,7 @@ def admin():
         selected_stock_filter=stock_filter,
         stock_feedback=item_modal_state['stock_feedback'],
         stock_confirmation=item_modal_state['stock_confirmation'],
+        action_confirmation=item_modal_state['action_confirmation'],
         modal_item=item_modal_state['modal_item'],
         show_modal_on_load=item_modal_state['show_modal_on_load']
     )
