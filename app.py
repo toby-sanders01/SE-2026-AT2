@@ -132,6 +132,35 @@ def filter_items(items, search_query, stock_filter):
     return filtered_items
 
 
+def normalize_user_role_filter(value):
+    role_filter = (value or 'all').strip().lower()
+    allowed_role_filters = {'all', 'admin', 'user'}
+    if role_filter not in allowed_role_filters:
+        return 'all'
+    return role_filter
+
+
+def filter_users(users, search_query, role_filter):
+    filtered_users = users
+
+    if search_query:
+        search_lower = search_query.lower()
+        filtered_users = [
+            user for user in filtered_users
+            if search_lower in (user['name'] or '').lower()
+            or search_lower in (user['email'] or '').lower()
+        ]
+
+    if role_filter != 'all':
+        target_admin_value = 1 if role_filter == 'admin' else 0
+        filtered_users = [
+            user for user in filtered_users
+            if int(user['is_admin']) == target_admin_value
+        ]
+
+    return filtered_users
+
+
 def build_item_modal_state(items):
     stock_feedback = None
     modal_item = None
@@ -308,6 +337,109 @@ def build_item_modal_state(items):
     }
 
 
+def build_user_modal_state(all_users):
+    user_feedback = None
+    user_modal = None
+    user_confirmation = None
+
+    user_status = request.args.get('user_status', '').strip()
+    user_modal_id_raw = request.args.get('user_modal_id', '').strip()
+    user_modal_id = None
+
+    if user_modal_id_raw:
+        try:
+            parsed_user_modal_id = int(user_modal_id_raw)
+            if parsed_user_modal_id > 0:
+                user_modal_id = parsed_user_modal_id
+        except ValueError:
+            user_modal_id = None
+
+    if user_modal_id is not None:
+        for user in all_users:
+            if user['id'] == user_modal_id:
+                user_modal = user
+                break
+
+    if user_status == 'permission_updated':
+        user_feedback = {
+            "type": "success",
+            "message": "User permissions updated successfully."
+        }
+    elif user_status == 'user_not_found':
+        user_feedback = {
+            "type": "error",
+            "message": "The selected user could not be found."
+        }
+    elif user_status == 'invalid_permission':
+        user_feedback = {
+            "type": "error",
+            "message": "Invalid permission value."
+        }
+    elif user_status == 'cannot_demote_self':
+        user_feedback = {
+            "type": "error",
+            "message": "You cannot remove your own admin permission."
+        }
+    elif user_status == 'last_admin':
+        user_feedback = {
+            "type": "error",
+            "message": "At least one admin must remain."
+        }
+    elif user_status == 'cannot_delete_self':
+        user_feedback = {
+            "type": "error",
+            "message": "You cannot delete your own account."
+        }
+    elif user_status == 'user_deleted':
+        user_feedback = {
+            "type": "success",
+            "message": "User removed successfully."
+        }
+
+    pending_user_action = request.args.get('pending_user_action', '').strip()
+    pending_user_id_raw = request.args.get('pending_user_id', '').strip()
+    pending_user_is_admin_raw = request.args.get('pending_user_is_admin', '').strip()
+    if pending_user_action and pending_user_id_raw:
+        try:
+            pending_user_id = int(pending_user_id_raw)
+        except ValueError:
+            pending_user_id = None
+
+        if isinstance(pending_user_id, int) and pending_user_id > 0:
+            for user in all_users:
+                if user['id'] == pending_user_id:
+                    user_modal = user
+                    break
+
+        if user_modal and pending_user_action == 'permission' and pending_user_is_admin_raw:
+            try:
+                pending_user_is_admin = int(pending_user_is_admin_raw)
+            except ValueError:
+                pending_user_is_admin = None
+            if pending_user_is_admin in {0, 1}:
+                user_confirmation = {
+                    "action": "permission",
+                    "user_id": pending_user_id,
+                    "target_is_admin": pending_user_is_admin
+                }
+        elif user_modal and pending_user_action == 'delete':
+            user_confirmation = {
+                "action": "delete",
+                "user_id": pending_user_id
+            }
+
+    show_user_modal_on_load = bool(
+        user_confirmation
+        or (user_feedback is not None and user_modal is not None)
+    )
+    return {
+        "user_feedback": user_feedback,
+        "user_modal": user_modal,
+        "user_confirmation": user_confirmation,
+        "show_user_modal_on_load": show_user_modal_on_load
+    }
+
+
 # Ensure both tables exist on startup.
 init_users_db()
 init_items_db()
@@ -342,6 +474,9 @@ def item_image(filename):
 def user():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+    
+    if session.get('is_admin'):
+        return redirect(url_for('admin'))
 
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
@@ -671,6 +806,161 @@ def delete_item():
     return redirect_back(stock_status='deleted')
 
 
+@app.route('/update-user-permission', methods=['POST'])
+def update_user_permission():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+
+    if not db_user:
+        users_conn.close()
+        session.clear()
+        return redirect(url_for('login'))
+    if not db_user['is_admin']:
+        users_conn.close()
+        return redirect(url_for('user'))
+
+    target_user_id_raw = request.form.get('target_user_id', '').strip()
+    target_is_admin_raw = request.form.get('target_is_admin', '').strip()
+    confirm_action = request.form.get('confirm_action', '').strip() == '1'
+    return_endpoint = request.form.get('return_endpoint', 'admin').strip()
+    if return_endpoint not in {'admin'}:
+        return_endpoint = 'admin'
+
+    def redirect_back(**params):
+        return redirect(url_for(return_endpoint, **params))
+
+    try:
+        target_user_id = int(target_user_id_raw)
+        target_is_admin = int(target_is_admin_raw)
+        if target_user_id < 1 or target_is_admin not in {0, 1}:
+            raise ValueError
+    except ValueError:
+        users_conn.close()
+        return redirect_back(user_status='invalid_permission')
+
+    target_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (target_user_id,)
+    ).fetchone()
+    if not target_user:
+        users_conn.close()
+        return redirect_back(user_status='user_not_found')
+
+    if not confirm_action:
+        users_conn.close()
+        return redirect_back(
+            pending_user_action='permission',
+            pending_user_id=target_user_id,
+            pending_user_is_admin=target_is_admin
+        )
+
+    if target_user_id == db_user['id'] and target_is_admin == 0:
+        users_conn.close()
+        return redirect_back(user_status='cannot_demote_self', user_modal_id=target_user_id)
+
+    if int(target_user['is_admin']) == 1 and target_is_admin == 0:
+        admin_count = users_conn.execute(
+            'SELECT COUNT(*) FROM users WHERE is_admin = 1'
+        ).fetchone()[0]
+        if admin_count <= 1:
+            users_conn.close()
+            return redirect_back(user_status='last_admin', user_modal_id=target_user_id)
+
+    users_conn.execute(
+        'UPDATE users SET is_admin = ? WHERE id = ?',
+        (target_is_admin, target_user_id)
+    )
+    users_conn.commit()
+    users_conn.close()
+    return redirect_back(user_status='permission_updated', user_modal_id=target_user_id)
+
+
+@app.route('/delete-user', methods=['POST'])
+def delete_user():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    users_conn = get_users_db_connection()
+    db_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (session.get('user_id'),)
+    ).fetchone()
+
+    if not db_user:
+        users_conn.close()
+        session.clear()
+        return redirect(url_for('login'))
+    if not db_user['is_admin']:
+        users_conn.close()
+        return redirect(url_for('user'))
+
+    target_user_id_raw = request.form.get('target_user_id', '').strip()
+    confirm_action = request.form.get('confirm_action', '').strip() == '1'
+    return_endpoint = request.form.get('return_endpoint', 'admin').strip()
+    if return_endpoint != 'admin':
+        return_endpoint = 'admin'
+
+    def redirect_back(**params):
+        return redirect(url_for(return_endpoint, **params))
+
+    try:
+        target_user_id = int(target_user_id_raw)
+        if target_user_id < 1:
+            raise ValueError
+    except ValueError:
+        users_conn.close()
+        return redirect_back(user_status='user_not_found')
+
+    target_user = users_conn.execute(
+        'SELECT id, is_admin FROM users WHERE id = ?',
+        (target_user_id,)
+    ).fetchone()
+    if not target_user:
+        users_conn.close()
+        return redirect_back(user_status='user_not_found')
+
+    if not confirm_action:
+        users_conn.close()
+        return redirect_back(
+            pending_user_action='delete',
+            pending_user_id=target_user_id
+        )
+
+    if target_user_id == db_user['id']:
+        users_conn.close()
+        return redirect_back(user_status='cannot_delete_self', user_modal_id=target_user_id)
+
+    if int(target_user['is_admin']) == 1:
+        admin_count = users_conn.execute(
+            'SELECT COUNT(*) FROM users WHERE is_admin = 1'
+        ).fetchone()[0]
+        if admin_count <= 1:
+            users_conn.close()
+            return redirect_back(user_status='last_admin', user_modal_id=target_user_id)
+
+    items_conn = get_items_db_connection()
+    items_conn.execute(
+        'UPDATE items SET user_id = NULL WHERE user_id = ?',
+        (target_user_id,)
+    )
+    items_conn.commit()
+    items_conn.close()
+
+    users_conn.execute(
+        'DELETE FROM users WHERE id = ?',
+        (target_user_id,)
+    )
+    users_conn.commit()
+    users_conn.close()
+    return redirect_back(user_status='user_deleted')
+
+
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if 'user_id' not in session:
@@ -763,6 +1053,18 @@ def admin():
     items = filter_items(visible_items, search_query, stock_filter)
     item_modal_state = build_item_modal_state(items)
 
+    user_search_query = request.args.get('user_q', '').strip()
+    user_role_filter = normalize_user_role_filter(request.args.get('user_role', 'all'))
+    all_users = users_conn.execute(
+        '''
+        SELECT id, name, email, is_admin
+        FROM users
+        ORDER BY id
+        '''
+    ).fetchall()
+    filtered_users = filter_users(all_users, user_search_query, user_role_filter)
+    user_modal_state = build_user_modal_state(all_users)
+
     users_conn.close()
     session['user_email'] = db_user['email']
     session['user_name'] = user_name
@@ -775,16 +1077,30 @@ def admin():
         items=items,
         search_query=search_query,
         selected_stock_filter=stock_filter,
+        admin_users=filtered_users,
+        user_search_query=user_search_query,
+        selected_user_role_filter=user_role_filter,
         stock_feedback=item_modal_state['stock_feedback'],
         stock_confirmation=item_modal_state['stock_confirmation'],
         action_confirmation=item_modal_state['action_confirmation'],
         modal_item=item_modal_state['modal_item'],
-        show_modal_on_load=item_modal_state['show_modal_on_load']
+        show_modal_on_load=item_modal_state['show_modal_on_load'],
+        user_feedback=user_modal_state['user_feedback'],
+        user_confirmation=user_modal_state['user_confirmation'],
+        user_modal=user_modal_state['user_modal'],
+        show_user_modal_on_load=user_modal_state['show_user_modal_on_load']
     )
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+
+    if 'user_id' in session:
+        if session.get('is_admin'):
+            return redirect(url_for('admin'))
+        else:
+            return redirect(url_for('user'))
+
     error = None
     success = "Account created. You can log in now." if request.args.get('created') == '1' else None
 
@@ -825,6 +1141,13 @@ def login():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+
+    if 'user_id' in session:
+        if session.get('is_admin'):
+            return redirect(url_for('admin'))
+        else:
+            return redirect(url_for('user'))
+
     error = None
 
     if request.method == 'POST':
@@ -868,7 +1191,7 @@ def signup():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect(url_for('index'))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,46 @@
+<section class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+    <form method="get" action="{{ url_for(request.endpoint) }}" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+        <input type="hidden" name="q" value="{{ search_query or '' }}">
+        <input type="hidden" name="stock" value="{{ selected_stock_filter or 'all' }}">
+
+        <div class="md:col-span-7">
+            <label for="user-search" class="block text-sm font-medium text-gray-700 mb-1">Search users</label>
+            <input
+                id="user-search"
+                name="user_q"
+                type="text"
+                value="{{ user_search_query or '' }}"
+                placeholder="Search by name or email"
+                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500"
+            >
+        </div>
+
+        <div class="md:col-span-3">
+            <label for="user-role-filter" class="block text-sm font-medium text-gray-700 mb-1">Role filter</label>
+            <select
+                id="user-role-filter"
+                name="user_role"
+                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500 bg-white"
+            >
+                <option value="all" {% if selected_user_role_filter == 'all' %}selected{% endif %}>All</option>
+                <option value="admin" {% if selected_user_role_filter == 'admin' %}selected{% endif %}>Admin</option>
+                <option value="user" {% if selected_user_role_filter == 'user' %}selected{% endif %}>User</option>
+            </select>
+        </div>
+
+        <div class="md:col-span-2 flex gap-2">
+            <button
+                type="submit"
+                class="w-full inline-flex items-center justify-center rounded-full bg-slate-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-600/90 transition-colors"
+            >
+                Apply
+            </button>
+            <a
+                href="{{ url_for(request.endpoint) }}"
+                class="inline-flex items-center justify-center rounded-full border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+                Reset
+            </a>
+        </div>
+    </form>
+</section>

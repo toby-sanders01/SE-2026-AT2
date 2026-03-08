@@ -178,7 +178,7 @@
                     Cancel
                 </a>
             </div>
-        </details>
+        </div>
         {% endif %}
 
         {% if current_user_is_admin %}
@@ -423,15 +423,7 @@
             modalOverlay.setAttribute("aria-hidden", "false");
         };
 
-        const closeModal = () => {
-            if (!modalOverlay) return;
-            clearModalFeedback();
-            clearModalConfirmation();
-            clearModalActionConfirmation();
-            modalOverlay.classList.add("hidden");
-            modalOverlay.classList.remove("flex");
-            modalOverlay.setAttribute("aria-hidden", "true");
-
+        const clearItemModalQueryParams = () => {
             const currentUrl = new URL(window.location.href);
             const paramsToClear = [
                 "stock_status",
@@ -449,8 +441,20 @@
             paramsToClear.forEach((param) => currentUrl.searchParams.delete(param));
 
             const search = currentUrl.searchParams.toString();
-            const nextUrl = search ? `${currentUrl.pathname}?${search}` : currentUrl.pathname;
+            const hash = currentUrl.hash || "";
+            const nextUrl = search ? `${currentUrl.pathname}?${search}${hash}` : `${currentUrl.pathname}${hash}`;
             window.history.replaceState({}, "", nextUrl);
+        };
+
+        const closeModal = () => {
+            if (!modalOverlay) return;
+            clearModalFeedback();
+            clearModalConfirmation();
+            clearModalActionConfirmation();
+            modalOverlay.classList.add("hidden");
+            modalOverlay.classList.remove("flex");
+            modalOverlay.setAttribute("aria-hidden", "true");
+            clearItemModalQueryParams();
         };
 
         modalOpenButtons.forEach((button) => {

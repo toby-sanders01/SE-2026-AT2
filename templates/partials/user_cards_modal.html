@@ -1,0 +1,273 @@
+{% if user_feedback and not show_user_modal_on_load %}
+<p class="rounded-xl px-4 py-3 text-sm font-medium {% if user_feedback['type'] == 'success' %}bg-emerald-100 text-emerald-800{% else %}bg-rose-100 text-rose-700{% endif %}">
+    {{ user_feedback['message'] }}
+</p>
+{% endif %}
+
+<section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+    {% for user in admin_users %}
+    <article class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+        <div class="space-y-2">
+            <h3 class="text-lg font-semibold text-gray-900">{{ user['name'] or 'Unnamed User' }}</h3>
+            <p class="text-sm font-medium text-gray-500">{{ user['email'] }}</p>
+            {% if user['is_admin'] %}
+            <div class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Admin
+            </div>
+            {% else %}
+            <div class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                User
+            </div>
+            {% endif %}
+            <button
+                type="button"
+                data-user-modal-open
+                data-user-id="{{ user['id'] }}"
+                data-user-name="{{ user['name'] or 'Unnamed User' }}"
+                data-user-email="{{ user['email'] }}"
+                data-user-is-admin="{{ user['is_admin'] }}"
+                class="mt-2 inline-flex items-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+                Manage
+            </button>
+        </div>
+    </article>
+    {% else %}
+    <article class="sm:col-span-2 xl:col-span-3 bg-white border border-dashed border-gray-300 rounded-2xl p-10 text-center text-gray-500">
+        No users matched your filters.
+    </article>
+    {% endfor %}
+</section>
+
+{% set user_modal_name = '-' %}
+{% set user_modal_email = '-' %}
+{% set user_modal_role = '-' %}
+
+{% if user_modal %}
+    {% set user_modal_name = user_modal['name'] or 'Unnamed User' %}
+    {% set user_modal_email = user_modal['email'] %}
+    {% if user_modal['is_admin'] %}
+        {% set user_modal_role = 'Admin' %}
+    {% else %}
+        {% set user_modal_role = 'User' %}
+    {% endif %}
+{% endif %}
+
+<div
+    id="user-modal-overlay"
+    class="fixed inset-0 z-50 {% if show_user_modal_on_load %}flex{% else %}hidden{% endif %} items-center justify-center bg-black/25 backdrop-blur-sm p-4"
+    aria-hidden="{% if show_user_modal_on_load %}false{% else %}true{% endif %}"
+>
+    <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-modal-title"
+        class="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+    >
+        <div class="flex items-start justify-between gap-4">
+            <h2 id="user-modal-title" class="text-xl font-semibold text-gray-900">{{ user_modal_name }}</h2>
+            <button
+                type="button"
+                data-user-modal-close
+                class="rounded-full border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
+            >
+                Close
+            </button>
+        </div>
+
+        {% if user_feedback and show_user_modal_on_load %}
+        <p id="user-modal-feedback" class="mt-4 rounded-xl px-4 py-3 text-sm font-medium {% if user_feedback['type'] == 'success' %}bg-emerald-100 text-emerald-800{% else %}bg-rose-100 text-rose-700{% endif %}">
+            {{ user_feedback['message'] }}
+        </p>
+        {% endif %}
+
+        <div class="mt-4 space-y-2 text-sm text-gray-700">
+            <p><span class="font-semibold text-gray-900">Email:</span> <span id="user-modal-email">{{ user_modal_email }}</span></p>
+            <p><span class="font-semibold text-gray-900">Current Role:</span> <span id="user-modal-role">{{ user_modal_role }}</span></p>
+        </div>
+
+        <form method="post" action="{{ url_for('update_user_permission') }}" class="mt-5 space-y-3 border-t border-gray-200 pt-4">
+            <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+            <input
+                type="hidden"
+                id="user-modal-id"
+                name="target_user_id"
+                value="{% if user_confirmation %}{{ user_confirmation['user_id'] }}{% elif user_modal %}{{ user_modal['id'] }}{% endif %}"
+            >
+
+            <div>
+                <label for="target_is_admin" class="block text-sm font-medium text-gray-700 mb-1">Change permission</label>
+                <select
+                    id="target_is_admin"
+                    name="target_is_admin"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-slate-500 bg-white"
+                >
+                    <option value="0" {% if user_confirmation and user_confirmation['target_is_admin'] == 0 %}selected{% elif user_modal and not user_modal['is_admin'] %}selected{% endif %}>User</option>
+                    <option value="1" {% if user_confirmation and user_confirmation['target_is_admin'] == 1 %}selected{% elif user_modal and user_modal['is_admin'] %}selected{% endif %}>Admin</option>
+                </select>
+            </div>
+
+            <button
+                type="submit"
+                class="inline-flex items-center rounded-full bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+                Update permission
+            </button>
+        </form>
+
+        {% if not (user_confirmation and user_confirmation['action'] == 'delete') %}
+        <form method="post" action="{{ url_for('delete_user') }}" class="mt-4 border-t border-gray-200 pt-4">
+            <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+            <input
+                type="hidden"
+                id="user-modal-delete-id"
+                name="target_user_id"
+                value="{% if user_confirmation %}{{ user_confirmation['user_id'] }}{% elif user_modal %}{{ user_modal['id'] }}{% endif %}"
+            >
+            <button
+                type="submit"
+                class="inline-flex items-center rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
+            >
+                Delete user
+            </button>
+        </form>
+        {% endif %}
+
+        {% if user_confirmation %}
+        <div id="user-modal-confirmation" class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            {% if user_confirmation['action'] == 'permission' %}
+                <p class="font-semibold">Confirm permission change</p>
+                <p class="mt-1">
+                    Set {{ user_modal_name }} as {% if user_confirmation['target_is_admin'] == 1 %}Admin{% else %}User{% endif %}?
+                </p>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <form method="post" action="{{ url_for('update_user_permission') }}">
+                        <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                        <input type="hidden" name="target_user_id" value="{{ user_confirmation['user_id'] }}">
+                        <input type="hidden" name="target_is_admin" value="{{ user_confirmation['target_is_admin'] }}">
+                        <input type="hidden" name="confirm_action" value="1">
+                        <button
+                            type="submit"
+                            class="inline-flex items-center rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
+                        >
+                            Confirm change
+                        </button>
+                    </form>
+            {% elif user_confirmation['action'] == 'delete' %}
+                <p class="font-semibold">Confirm user deletion</p>
+                <p class="mt-1">
+                    Delete {{ user_modal_name }} permanently?
+                </p>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <form method="post" action="{{ url_for('delete_user') }}">
+                        <input type="hidden" name="return_endpoint" value="{{ request.endpoint }}">
+                        <input type="hidden" name="target_user_id" value="{{ user_confirmation['user_id'] }}">
+                        <input type="hidden" name="confirm_action" value="1">
+                        <button
+                            type="submit"
+                            class="inline-flex items-center rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 transition-colors"
+                        >
+                            Confirm delete
+                        </button>
+                    </form>
+            {% endif %}
+                    <a
+                        href="{{ url_for(request.endpoint) }}"
+                        class="inline-flex items-center rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-white transition-colors"
+                    >
+                        Cancel
+                    </a>
+                </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const userModalOverlay = document.getElementById("user-modal-overlay");
+        const userModalOpenButtons = document.querySelectorAll("[data-user-modal-open]");
+        const userModalCloseButtons = document.querySelectorAll("[data-user-modal-close]");
+
+        const userModalTitle = document.getElementById("user-modal-title");
+        const userModalEmail = document.getElementById("user-modal-email");
+        const userModalRole = document.getElementById("user-modal-role");
+        const userModalIdInput = document.getElementById("user-modal-id");
+        const userDeleteIdInput = document.getElementById("user-modal-delete-id");
+        const userPermissionSelect = document.getElementById("target_is_admin");
+        const userModalFeedback = document.getElementById("user-modal-feedback");
+        const userModalConfirmation = document.getElementById("user-modal-confirmation");
+
+        const clearUserFeedback = () => {
+            if (userModalFeedback) userModalFeedback.remove();
+        };
+
+        const clearUserConfirmation = () => {
+            if (userModalConfirmation) userModalConfirmation.remove();
+        };
+
+        const openUserModal = (button) => {
+            if (!userModalOverlay) return;
+            clearUserFeedback();
+            clearUserConfirmation();
+
+            const isAdmin = button.dataset.userIsAdmin === "1";
+
+            if (userModalTitle) userModalTitle.textContent = button.dataset.userName || "User";
+            if (userModalEmail) userModalEmail.textContent = button.dataset.userEmail || "-";
+            if (userModalRole) userModalRole.textContent = isAdmin ? "Admin" : "User";
+            if (userModalIdInput) userModalIdInput.value = button.dataset.userId || "";
+            if (userDeleteIdInput) userDeleteIdInput.value = button.dataset.userId || "";
+            if (userPermissionSelect) userPermissionSelect.value = isAdmin ? "1" : "0";
+
+            userModalOverlay.classList.remove("hidden");
+            userModalOverlay.classList.add("flex");
+            userModalOverlay.setAttribute("aria-hidden", "false");
+        };
+
+        const clearUserModalQueryParams = () => {
+            const currentUrl = new URL(window.location.href);
+            const paramsToClear = [
+                "user_status",
+                "user_modal_id",
+                "pending_user_action",
+                "pending_user_id",
+                "pending_user_is_admin"
+            ];
+            paramsToClear.forEach((param) => currentUrl.searchParams.delete(param));
+
+            const search = currentUrl.searchParams.toString();
+            const hash = currentUrl.hash || "";
+            const nextUrl = search ? `${currentUrl.pathname}?${search}${hash}` : `${currentUrl.pathname}${hash}`;
+            window.history.replaceState({}, "", nextUrl);
+        };
+
+        const closeUserModal = () => {
+            if (!userModalOverlay) return;
+            clearUserFeedback();
+            clearUserConfirmation();
+            userModalOverlay.classList.add("hidden");
+            userModalOverlay.classList.remove("flex");
+            userModalOverlay.setAttribute("aria-hidden", "true");
+            clearUserModalQueryParams();
+        };
+
+        userModalOpenButtons.forEach((button) => {
+            button.addEventListener("click", () => openUserModal(button));
+        });
+
+        userModalCloseButtons.forEach((button) => {
+            button.addEventListener("click", closeUserModal);
+        });
+
+        if (userModalOverlay) {
+            userModalOverlay.addEventListener("click", (event) => {
+                if (event.target === userModalOverlay) closeUserModal();
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") closeUserModal();
+        });
+    });
+</script>
