@@ -142,7 +142,7 @@
         </div>
     </section>
 
-    <section class="space-y-4" id = "users">
+	<section class="space-y-4" id = "users">
     <div class="flex items-center justify-between gap-4">
         <h2 class="text-xl font-semibold text-gray-900">Users & Permissions</h2>
         <label for="users-view-toggle" class="inline-flex items-center gap-3 cursor-pointer">
@@ -158,6 +158,75 @@
     <div id="users-view-content" class="space-y-4">
         {% include "partials/user_filters.html" %}
         {% include "partials/user_cards_modal.html" %}
+    </div>
+</section>
+
+<section class="space-y-4" id="audit-log">
+    <div class="flex items-center justify-between gap-4">
+        <h2 class="text-xl font-semibold text-gray-900">Item Audit Log</h2>
+        <label for="audit-log-toggle" class="inline-flex items-center gap-3 cursor-pointer">
+            <span class="text-sm font-medium text-gray-700">Show</span>
+            <span class="relative inline-flex h-6 w-11 items-center">
+                <input id="audit-log-toggle" type="checkbox" class="peer sr-only" checked>
+                <span class="absolute inset-0 rounded-full bg-gray-300 transition peer-checked:bg-slate-500"></span>
+                <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition peer-checked:translate-x-5"></span>
+            </span>
+        </label>
+    </div>
+    <div id="audit-log-content">
+        <div class="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-[0px_0px_12px_0px] shadow-black/10">
+            <div class="max-h-[360px] overflow-y-auto">
+        <table class="min-w-full text-sm">
+            <thead class="sticky top-0 z-10 bg-gray-50 text-left text-gray-600">
+                <tr>
+                    <th class="px-4 py-3 font-medium">Time (UTC)</th>
+                    <th class="px-4 py-3 font-medium">User</th>
+                    <th class="px-4 py-3 font-medium">Action</th>
+                    <th class="px-4 py-3 font-medium">Status</th>
+                    <th class="px-4 py-3 font-medium">Item</th>
+                    <th class="px-4 py-3 font-medium">Tag</th>
+                    <th class="px-4 py-3 font-medium">Stock</th>
+                    <th class="px-4 py-3 font-medium">Error</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-gray-700">
+                {% for log in item_audit_logs %}
+                <tr class="align-top">
+                    <td class="px-4 py-3 whitespace-nowrap">{{ log['created_at_display'] }}</td>
+                    <td class="px-4 py-3">{{ log['actor_display'] }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">{{ log['action'] }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        {% if log['status'] == 'success' %}
+                        <span class="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Success</span>
+                        {% else %}
+                        <span class="inline-flex rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">Failure</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">{{ log['new_title'] or log['old_title'] or '-' }}</td>
+                    <td class="px-4 py-3">{{ log['new_tag'] or log['old_tag'] or '-' }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        {% if log['old_stock'] is not none and log['new_stock'] is not none %}
+                            {{ log['old_stock'] }} → {{ log['new_stock'] }}
+                        {% elif log['new_stock'] is not none %}
+                            {{ log['new_stock'] }}
+                        {% elif log['old_stock'] is not none %}
+                            {{ log['old_stock'] }}
+                        {% endif %}
+                        {% if log['stock_change'] is not none %}
+                            ({{ '%+d'|format(log['stock_change']) }})
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">{{ log['error_message'] or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">No audit log entries yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -193,6 +262,16 @@
         if (usersToggle && usersContent) {
             usersToggle.addEventListener("change", syncUsersVisibility);
             syncUsersVisibility();
+        }
+
+        const auditToggle = document.getElementById("audit-log-toggle");
+        const auditContent = document.getElementById("audit-log-content");
+        const syncAuditVisibility = () => {
+            auditContent.classList.toggle("hidden", !auditToggle.checked);
+        };
+        if (auditToggle && auditContent) {
+            auditToggle.addEventListener("change", syncAuditVisibility);
+            syncAuditVisibility();
         }
     });
 </script>

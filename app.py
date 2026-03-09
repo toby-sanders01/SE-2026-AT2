@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -54,6 +55,41 @@ def init_items_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS item_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            admin_user_id INTEGER,
+            action TEXT NOT NULL,
+            item_id INTEGER,
+            status TEXT NOT NULL,
+            old_title TEXT,
+            new_title TEXT,
+            old_tag TEXT,
+            new_tag TEXT,
+            old_description TEXT,
+            new_description TEXT,
+            old_stock INTEGER,
+            stock_change INTEGER,
+            new_stock INTEGER,
+            old_image TEXT,
+            new_image TEXT,
+            error_message TEXT NOT NULL DEFAULT ''
+        )
+    ''')
+    c.execute(
+        'CREATE INDEX IF NOT EXISTS idx_item_audit_logs_created_at ON item_audit_logs(created_at DESC)'
+    )
+    c.execute(
+        'CREATE INDEX IF NOT EXISTS idx_item_audit_logs_item_id ON item_audit_logs(item_id)'
+    )
+    c.execute(
+        'CREATE INDEX IF NOT EXISTS idx_item_audit_logs_admin_user_id ON item_audit_logs(admin_user_id)'
+    )
+    c.execute(
+        'CREATE INDEX IF NOT EXISTS idx_item_audit_logs_action ON item_audit_logs(action)'
+    )
+
     ITEM_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
     conn.commit()
@@ -78,6 +114,82 @@ def get_items_db_connection():
     conn = sqlite3.connect(ITEMS_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def write_item_audit_log(
+    admin_user_id,
+    action,
+    status,
+    item_id=None,
+    old_title=None,
+    new_title=None,
+    old_tag=None,
+    new_tag=None,
+    old_description=None,
+    new_description=None,
+    old_stock=None,
+    stock_change=None,
+    new_stock=None,
+    old_image=None,
+    new_image=None,
+    error_message=''
+):
+    items_conn = get_items_db_connection()
+    items_conn.execute(
+        '''
+        INSERT INTO item_audit_logs (
+            created_at,
+            admin_user_id,
+            action,
+            item_id,
+            status,
+            old_title,
+            new_title,
+            old_tag,
+            new_tag,
+            old_description,
+            new_description,
+            old_stock,
+            stock_change,
+            new_stock,
+            old_image,
+            new_image,
+            error_message
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''',
+        (
+            datetime.now(timezone.utc).isoformat(),
+            admin_user_id,
+            action,
+            item_id,
+            status,
+            old_title,
+            new_title,
+            old_tag,
+            new_tag,
+            old_description,
+            new_description,
+            old_stock,
+            stock_change,
+            new_stock,
+            old_image,
+            new_image,
+            error_message
+        )
+    )
+    items_conn.commit()
+    items_conn.close()
+
+
+def format_audit_timestamp(timestamp_value):
+    if not timestamp_value:
+        return '-'
+    try:
+        parsed = datetime.fromisoformat(timestamp_value)
+    except ValueError:
+        return timestamp_value
+    return parsed.strftime('%d %b %Y, %I:%M:%S %p UTC')
 
 
 def get_visible_items_for_user(user_id):
@@ -552,6 +664,12 @@ def decrease_stock():
         if item_id < 1:
             raise ValueError
     except ValueError:
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_decrease',
+            status='failure',
+            error_message='Invalid item id.'
+        )
         return redirect_back(stock_status='invalid_amount')
 
     try:
@@ -559,12 +677,19 @@ def decrease_stock():
         if decrease_amount < 1:
             raise ValueError
     except ValueError:
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_decrease',
+            status='failure',
+            item_id=item_id,
+            error_message='Invalid decrease amount.'
+        )
         return redirect_back(stock_status='invalid_amount', modal_item_id=item_id)
 
     items_conn = get_items_db_connection()
     item = items_conn.execute(
         '''
-        SELECT id, stock_remaining
+        SELECT id, title, tag, description, image, stock_remaining
         FROM items
         WHERE id = ? AND (user_id = ? OR user_id IS NULL)
         ''',
@@ -573,14 +698,46 @@ def decrease_stock():
 
     if not item:
         items_conn.close()
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_decrease',
+            status='failure',
+            item_id=item_id,
+            error_message='Item not found.'
+        )
         return redirect_back(stock_status='item_not_found')
     
     if item['stock_remaining'] == 0:
         items_conn.close()
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_decrease',
+            status='failure',
+            item_id=item_id,
+            old_title=item['title'],
+            old_tag=item['tag'],
+            old_description=item['description'],
+            old_stock=item['stock_remaining'],
+            old_image=item['image'],
+            error_message='No items remaining.'
+        )
         return redirect_back(stock_status='zero', modal_item_id=item_id)
 
     if decrease_amount > item['stock_remaining']:
         items_conn.close()
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_decrease',
+            status='failure',
+            item_id=item_id,
+            old_title=item['title'],
+            old_tag=item['tag'],
+            old_description=item['description'],
+            old_stock=item['stock_remaining'],
+            old_image=item['image'],
+            stock_change=-decrease_amount,
+            error_message='Decrease amount exceeds remaining stock.'
+        )
         return redirect_back(stock_status='insufficient', modal_item_id=item_id)
 
 
@@ -594,6 +751,24 @@ def decrease_stock():
     )
     items_conn.commit()
     items_conn.close()
+
+    write_item_audit_log(
+        admin_user_id=db_user['id'],
+        action='stock_decrease',
+        status='success',
+        item_id=item_id,
+        old_title=item['title'],
+        new_title=item['title'],
+        old_tag=item['tag'],
+        new_tag=item['tag'],
+        old_description=item['description'],
+        new_description=item['description'],
+        old_stock=item['stock_remaining'],
+        stock_change=-decrease_amount,
+        new_stock=item['stock_remaining'] - decrease_amount,
+        old_image=item['image'],
+        new_image=item['image']
+    )
 
     return redirect_back(stock_status='decreased', stock_amount=decrease_amount, modal_item_id=item_id)
 
@@ -632,12 +807,18 @@ def add_stock():
         if item_id < 1 or add_amount < 1:
             raise ValueError
     except ValueError:
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_add',
+            status='failure',
+            error_message='Invalid item id or add amount.'
+        )
         return redirect_back(stock_status='invalid_amount', modal_item_id=item_id_raw)
 
     items_conn = get_items_db_connection()
     item = items_conn.execute(
         '''
-        SELECT id
+        SELECT id, title, tag, description, image, stock_remaining
         FROM items
         WHERE id = ? AND (user_id = ? OR user_id IS NULL)
         ''',
@@ -646,6 +827,13 @@ def add_stock():
 
     if not item:
         items_conn.close()
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='stock_add',
+            status='failure',
+            item_id=item_id,
+            error_message='Item not found.'
+        )
         return redirect_back(stock_status='item_not_found')
 
     if not confirm_action:
@@ -662,6 +850,24 @@ def add_stock():
     )
     items_conn.commit()
     items_conn.close()
+
+    write_item_audit_log(
+        admin_user_id=db_user['id'],
+        action='stock_add',
+        status='success',
+        item_id=item_id,
+        old_title=item['title'],
+        new_title=item['title'],
+        old_tag=item['tag'],
+        new_tag=item['tag'],
+        old_description=item['description'],
+        new_description=item['description'],
+        old_stock=item['stock_remaining'],
+        stock_change=add_amount,
+        new_stock=item['stock_remaining'] + add_amount,
+        old_image=item['image'],
+        new_image=item['image']
+    )
     return redirect_back(stock_status='added', stock_amount=add_amount, modal_item_id=item_id)
 
 
@@ -700,15 +906,31 @@ def edit_item():
         if item_id < 1:
             raise ValueError
     except ValueError:
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='edit',
+            status='failure',
+            error_message='Invalid item id.'
+        )
         return redirect_back(stock_status='item_not_found')
 
     if not title or not tag:
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='edit',
+            status='failure',
+            item_id=item_id,
+            new_title=title or None,
+            new_tag=tag or None,
+            new_description=description or None,
+            error_message='Title and tag are required.'
+        )
         return redirect_back(stock_status='invalid_amount', modal_item_id=item_id)
 
     items_conn = get_items_db_connection()
     item = items_conn.execute(
         '''
-        SELECT id
+        SELECT id, title, tag, description, image, stock_remaining
         FROM items
         WHERE id = ? AND (user_id = ? OR user_id IS NULL)
         ''',
@@ -717,6 +939,16 @@ def edit_item():
 
     if not item:
         items_conn.close()
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='edit',
+            status='failure',
+            item_id=item_id,
+            new_title=title,
+            new_tag=tag,
+            new_description=description,
+            error_message='Item not found.'
+        )
         return redirect_back(stock_status='item_not_found')
 
     if not confirm_action:
@@ -739,6 +971,23 @@ def edit_item():
     )
     items_conn.commit()
     items_conn.close()
+
+    write_item_audit_log(
+        admin_user_id=db_user['id'],
+        action='edit',
+        status='success',
+        item_id=item_id,
+        old_title=item['title'],
+        new_title=title,
+        old_tag=item['tag'],
+        new_tag=tag,
+        old_description=item['description'],
+        new_description=description,
+        old_stock=item['stock_remaining'],
+        new_stock=item['stock_remaining'],
+        old_image=item['image'],
+        new_image=item['image']
+    )
     return redirect_back(stock_status='edited', modal_item_id=item_id)
 
 
@@ -774,12 +1023,18 @@ def delete_item():
         if item_id < 1:
             raise ValueError
     except ValueError:
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='delete',
+            status='failure',
+            error_message='Invalid item id.'
+        )
         return redirect_back(stock_status='item_not_found')
 
     items_conn = get_items_db_connection()
     item = items_conn.execute(
         '''
-        SELECT id
+        SELECT id, title, tag, description, image, stock_remaining
         FROM items
         WHERE id = ? AND (user_id = ? OR user_id IS NULL)
         ''',
@@ -788,6 +1043,13 @@ def delete_item():
 
     if not item:
         items_conn.close()
+        write_item_audit_log(
+            admin_user_id=db_user['id'],
+            action='delete',
+            status='failure',
+            item_id=item_id,
+            error_message='Item not found.'
+        )
         return redirect_back(stock_status='item_not_found')
 
     if not confirm_action:
@@ -803,6 +1065,18 @@ def delete_item():
     )
     items_conn.commit()
     items_conn.close()
+
+    write_item_audit_log(
+        admin_user_id=db_user['id'],
+        action='delete',
+        status='success',
+        item_id=item_id,
+        old_title=item['title'],
+        old_tag=item['tag'],
+        old_description=item['description'],
+        old_stock=item['stock_remaining'],
+        old_image=item['image']
+    )
     return redirect_back(stock_status='deleted')
 
 
@@ -1003,12 +1277,39 @@ def admin():
 
         if not title:
             error = 'Item title is required.'
+            write_item_audit_log(
+                admin_user_id=db_user['id'],
+                action='create',
+                status='failure',
+                new_title=title or None,
+                new_tag=tag or None,
+                new_description=description or None,
+                error_message=error
+            )
         elif not tag:
             error = 'Item tag is required.'
+            write_item_audit_log(
+                admin_user_id=db_user['id'],
+                action='create',
+                status='failure',
+                new_title=title or None,
+                new_tag=tag or None,
+                new_description=description or None,
+                error_message=error
+            )
         elif uploaded_filename:
             upload_extension = get_upload_extension(uploaded_filename)
             if not upload_extension:
                 error = 'Upload a valid image file: png, jpg, jpeg, gif, webp, or svg.'
+                write_item_audit_log(
+                    admin_user_id=db_user['id'],
+                    action='create',
+                    status='failure',
+                    new_title=title or None,
+                    new_tag=tag or None,
+                    new_description=description or None,
+                    error_message=error
+                )
 
         if error is None:
             try:
@@ -1017,6 +1318,15 @@ def admin():
                     raise ValueError
             except ValueError:
                 error = 'Stock remaining must be a non-negative whole number.'
+                write_item_audit_log(
+                    admin_user_id=db_user['id'],
+                    action='create',
+                    status='failure',
+                    new_title=title or None,
+                    new_tag=tag or None,
+                    new_description=description or None,
+                    error_message=error
+                )
 
         if error is None:
             image_value = image or 'small-logo.png'
@@ -1041,10 +1351,31 @@ def admin():
                     )
 
                 items_conn.commit()
+                write_item_audit_log(
+                    admin_user_id=db_user['id'],
+                    action='create',
+                    status='success',
+                    item_id=insert_cursor.lastrowid,
+                    new_title=title,
+                    new_tag=tag,
+                    new_description=description,
+                    new_stock=stock_remaining,
+                    new_image=image_value
+                )
                 success = 'Item created successfully.'
             except OSError:
                 items_conn.rollback()
                 error = 'Could not save uploaded image file.'
+                write_item_audit_log(
+                    admin_user_id=db_user['id'],
+                    action='create',
+                    status='failure',
+                    new_title=title or None,
+                    new_tag=tag or None,
+                    new_description=description or None,
+                    new_stock=stock_remaining if 'stock_remaining' in locals() else None,
+                    error_message=error
+                )
             items_conn.close()
 
     search_query = request.args.get('q', '').strip()
@@ -1064,6 +1395,44 @@ def admin():
     ).fetchall()
     filtered_users = filter_users(all_users, user_search_query, user_role_filter)
     user_modal_state = build_user_modal_state(all_users)
+    user_identity_by_id = {}
+    for user in all_users:
+        display_name = (user['name'] or '').strip() or user['email']
+        user_identity_by_id[user['id']] = f"{display_name} ({user['email']})"
+
+    items_conn = get_items_db_connection()
+    item_audit_logs = items_conn.execute(
+        '''
+        SELECT
+            id,
+            created_at,
+            admin_user_id,
+            action,
+            item_id,
+            status,
+            old_title,
+            new_title,
+            old_tag,
+            new_tag,
+            old_stock,
+            stock_change,
+            new_stock,
+            error_message
+        FROM item_audit_logs
+        WHERE action IN ('stock_add', 'stock_decrease')
+        ORDER BY id DESC
+        LIMIT 100
+        '''
+    ).fetchall()
+    items_conn.close()
+    item_audit_logs = [
+        {
+            **dict(log),
+            "created_at_display": format_audit_timestamp(log['created_at']),
+            "actor_display": user_identity_by_id.get(log['admin_user_id'], f"User #{log['admin_user_id']}" if log['admin_user_id'] else '-')
+        }
+        for log in item_audit_logs
+    ]
 
     users_conn.close()
     session['user_email'] = db_user['email']
@@ -1088,7 +1457,8 @@ def admin():
         user_feedback=user_modal_state['user_feedback'],
         user_confirmation=user_modal_state['user_confirmation'],
         user_modal=user_modal_state['user_modal'],
-        show_user_modal_on_load=user_modal_state['show_user_modal_on_load']
+        show_user_modal_on_load=user_modal_state['show_user_modal_on_load'],
+        item_audit_logs=item_audit_logs
     )
 
 
