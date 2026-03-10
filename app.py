@@ -572,6 +572,30 @@ def inject_auth_state():
     }
 
 
+@app.errorhandler(404)
+def page_not_found(error):
+    if session.get('is_admin'):
+        primary_endpoint = 'admin'
+        primary_label = 'Go to Admin Dashboard'
+    elif 'user_id' in session:
+        primary_endpoint = 'user'
+        primary_label = 'Go to Dashboard'
+    else:
+        primary_endpoint = 'index'
+        primary_label = 'Go to Home'
+
+    return (
+        render_template(
+            "404.html",
+            show_footer=True,
+            show_login=True,
+            primary_endpoint=primary_endpoint,
+            primary_label=primary_label
+        ),
+        404
+    )
+
+
 @app.route('/')
 def index():
     return render_template("index.html", show_footer=True, show_login=True)
@@ -1564,5 +1588,5 @@ def logout():
     return redirect(url_for('index'))
 
 
-if __name__ == '__main__':
-    app.run(port= 5001, debug=True)
+# if __name__ == '__main__':
+#     app.run(port= 5001, debug=True)
