@@ -30,11 +30,11 @@ def init_users_db():
     if 'is_admin' not in user_columns:
         c.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
 
-    admin_count = c.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
-    if admin_count == 0:
-        first_user = c.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()
-        if first_user:
-            c.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user[0],))
+    # admin_count = c.execute("SELECT COUNT(*) FROM users WHERE is_admin = 1").fetchone()[0]
+    # if admin_count == 0:
+    #     first_user = c.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()
+    #     if first_user:
+    #         c.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (first_user[0],))
 
     conn.commit()
     conn.close()
@@ -272,7 +272,7 @@ def filter_users(users, search_query, role_filter):
 
     return filtered_users
 
-
+# Codex - Used to build modal cards
 def build_item_modal_state(items):
     stock_feedback = None
     modal_item = None
@@ -448,7 +448,6 @@ def build_item_modal_state(items):
         "show_modal_on_load": show_modal_on_load
     }
 
-
 def build_user_modal_state(all_users):
     user_feedback = None
     user_modal = None
@@ -558,12 +557,13 @@ init_items_db()
 
 
 @app.context_processor
-def inject_auth_state():
+# This injects authentication state into all templates, so we can show/hide elements based on login status and user role.
+def inject_auth_state(): 
     user_name = (session.get('user_name') or '').strip().capitalize()
     if not user_name and session.get('user_email'):
         user_name = session['user_email'].split('@', 1)[0]
     if not user_name:
-        user_name = "there"
+        user_name = "User"
 
     return {
         "logged_in": 'user_id' in session,
@@ -1555,29 +1555,22 @@ def signup():
         elif not name:
             error = 'Name is required.'
         elif len(password) < 8:
-            error = 'Password must be at least 8 characters.'
-        elif not email:
-            error = 'Email is required.'
+                error = 'Password must be at least 8 characters.'
+        elif not email or '@' not in email:
+            error = 'Proper email is required.'
         else:
             conn = get_users_db_connection()
             try:
-                first_account = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-                if first_account:
-                    conn.execute(
-                        'INSERT INTO users (name, email, password, is_admin) VALUES (?, ?, ?, 1)',
-                        (name, email, generate_password_hash(password))
-                    )
-                else:
-                    conn.execute(
-                        'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-                        (name, email, generate_password_hash(password))
+                conn.execute(
+                    'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+                    (name, email, generate_password_hash(password))
                     )
                 conn.commit()
                 conn.close()
                 return redirect(url_for('login', created='1'))
             except sqlite3.IntegrityError:
                 conn.close()
-                error = 'An account with that email already exists.'
+                error = 'An account with that email already exists.'    
 
     return render_template("signup.html", show_footer=False, error=error)
 
