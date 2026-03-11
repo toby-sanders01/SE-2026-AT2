@@ -1,7 +1,9 @@
 import sqlite3
+from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
+from time import time
+from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory, make_response
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -11,6 +13,54 @@ USERS_DB_PATH = 'users.db'
 ITEMS_DB_PATH = 'items.db'
 ITEM_IMAGES_DIR = Path('item_images')
 ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+RATE_LIMIT_CONFIG = {
+    "login": (5, 60),
+    "signup": (3, 300),
+    "item_changes": (30, 60),
+    "admin_user_changes": (20, 60)
+}
+RATE_LIMIT_EVENTS = defaultdict(deque)
+
+# Rate Limiting programmed by Codex
+def get_rate_limit_identity():
+    user_id = session.get('user_id')
+    if user_id:
+        return f"user:{user_id}"
+
+    forwarded_for = request.headers.get('X-Forwarded-For', '')
+    if forwarded_for:
+        client_ip = forwarded_for.split(',', 1)[0].strip()
+    else:
+        client_ip = request.remote_addr or 'unknown'
+    return f"ip:{client_ip}"
+
+
+def consume_rate_limit(bucket_name):
+    limit, window_seconds = RATE_LIMIT_CONFIG[bucket_name]
+    now = time()
+    bucket_key = f"{bucket_name}:{get_rate_limit_identity()}"
+    events = RATE_LIMIT_EVENTS[bucket_key]
+    cutoff = now - window_seconds
+
+    while events and events[0] <= cutoff:
+        events.popleft()
+
+    if len(events) >= limit:
+        retry_after = max(1, int(window_seconds - (now - events[0])))
+        response = make_response(
+            render_template(
+                "429.html",
+                #show_footer=True,
+                show_login=True,
+                retry_after=retry_after
+            ),
+            429
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        return response
+
+    events.append(now)
+    return None
 
 
 def init_users_db():
@@ -662,6 +712,10 @@ def decrease_stock():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    rate_limit_response = consume_rate_limit("item_changes")
+    if rate_limit_response:
+        return rate_limit_response
+
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
         'SELECT id, is_admin FROM users WHERE id = ?',
@@ -802,6 +856,10 @@ def add_stock():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    rate_limit_response = consume_rate_limit("item_changes")
+    if rate_limit_response:
+        return rate_limit_response
+
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
         'SELECT id, is_admin FROM users WHERE id = ?',
@@ -899,6 +957,10 @@ def add_stock():
 def edit_item():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
+    rate_limit_response = consume_rate_limit("item_changes")
+    if rate_limit_response:
+        return rate_limit_response
 
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
@@ -1020,6 +1082,10 @@ def delete_item():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    rate_limit_response = consume_rate_limit("item_changes")
+    if rate_limit_response:
+        return rate_limit_response
+
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
         'SELECT id, is_admin FROM users WHERE id = ?',
@@ -1109,6 +1175,10 @@ def update_user_permission():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    rate_limit_response = consume_rate_limit("admin_user_changes")
+    if rate_limit_response:
+        return rate_limit_response
+
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
         'SELECT id, is_admin FROM users WHERE id = ?',
@@ -1183,6 +1253,10 @@ def update_user_permission():
 def delete_user():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
+    rate_limit_response = consume_rate_limit("admin_user_changes")
+    if rate_limit_response:
+        return rate_limit_response
 
     users_conn = get_users_db_connection()
     db_user = users_conn.execute(
@@ -1287,6 +1361,11 @@ def admin():
     success = None
 
     if request.method == 'POST':
+        rate_limit_response = consume_rate_limit("item_changes")
+        if rate_limit_response:
+            users_conn.close()
+            return rate_limit_response
+
         title = request.form.get('title', '').strip()
         tag = request.form.get('tag', '').strip()
         image = request.form.get('image', '').strip()
@@ -1499,6 +1578,10 @@ def login():
     success = "Account created. You can log in now." if request.args.get('created') == '1' else None
 
     if request.method == 'POST':
+        rate_limit_response = consume_rate_limit("login")
+        if rate_limit_response:
+            return rate_limit_response
+
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
 
@@ -1545,6 +1628,10 @@ def signup():
     error = None
 
     if request.method == 'POST':
+        rate_limit_response = consume_rate_limit("signup")
+        if rate_limit_response:
+            return rate_limit_response
+
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
