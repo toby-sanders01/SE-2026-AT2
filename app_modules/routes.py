@@ -1,5 +1,7 @@
 from flask import redirect, render_template, request, send_from_directory, session, url_for
 
+#misc. codex assistance throughout the file
+
 #imports from other modules in the app
 from .database_int import ITEM_IMAGES_DIR
 from .core import (

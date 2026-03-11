@@ -31,11 +31,11 @@ def decrease_stock(actor_user_id, item_id_raw, decrease_amount_raw, confirm_larg
         return make_result(False, 'invalid_amount', redirect_params={'stock_status': 'invalid_amount'})
 
     try:
-        decrease_amount = int(decrease_amount_raw)
+        decrease_amount = int(decrease_amount_raw) #ensures decrease amount is an int
         if decrease_amount < 1:
             raise ValueError
-    except ValueError:
-        write_item_audit_log(
+    except ValueError: 
+        write_item_audit_log( # writes audit log
             admin_user_id=db_user['id'],
             action='stock_decrease',
             status='failure',

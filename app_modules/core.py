@@ -9,6 +9,8 @@ from .database_int import get_items_db_connection, get_users_db_connection
 
 ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
 
+#misc. codex assistance throughout the file
+
 # format to return results from service functions - made by Codex as part of restrcuturing
 def make_result(ok, status, payload=None, redirect_params=None, error=None):
     return {
